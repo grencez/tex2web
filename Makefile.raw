@@ -1,0 +1,31 @@
+
+default: all
+
+CC = gcc
+
+CONFIG += ansi
+CONFIG += debug
+
+CxPath = ../cx
+BinPath = ../bin
+BldPath = tex2web
+
+ExeList = tex2web
+Deps := $(ExeList)
+ExeList := $(addprefix $(BinPath)/,$(ExeList))
+Objs = $(addprefix $(BldPath)/,$(addsuffix .o,$(Deps)))
+
+include $(CxPath)/include.mk
+
+CXXFLAGS += $(CFLAGS)
+
+all: $(ExeList)
+
+$(call binexe,tex2web): $(BldPath)/tex2web.o $(CxStdObjs)
+	$(CC) $(CFLAGS) -o $@ $^
+
+.PHONY: clean
+clean:
+	rm -fr $(PfxBldPath)
+	rm -f $(ExeList)
+
