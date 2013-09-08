@@ -197,6 +197,7 @@ close_paragraph (HtmlState* st)
 // \quicksec{TEXT}  -->  <b>TEXT.</b>
 // \expten{NUM}  -->  &times;10<sup>NUM</sup>
 // \textit{TEXT}  -->  <it>TEXT</it>
+// \textbf{TEXT}  -->  <b>TEXT</b>
 // \ilcode{...}  -->  <code>...</code>
 // \begin{code}\n...\n\end{code}  -->  <pre><code>...</code></pre>
 // \href{URL}{TEXT}  -->  <a href='URL'>TEXT</a>
@@ -269,6 +270,14 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
           oput_cstr_OFile (of, "</i>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "textbf{")) {
+        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+          oput_cstr_OFile (of, "<b>");
+          htbody (st, olay, pathname);
+          //escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</b>");
         }
       }
       else if (skip_cstr_XFile (xf, "ilcode{")) {
