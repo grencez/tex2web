@@ -442,6 +442,7 @@ main (int argc, char** argv)
   lose_XFileB (xfb);
   lose_OFileB (ofb);
   lose_sysCx ();
+  good = 1;
   return good ? 0 : 1;
 }
 
