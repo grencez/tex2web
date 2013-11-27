@@ -135,12 +135,12 @@ static
   bool
 hthead (HtmlState* st, XFile* xf)
 {
-  bool good = true;
+  Sign good = 1;
   while (good)
   {
     XFile olay[1];
-    if (LegitCk( getlined_XFile (xf, "\\"), good, "" ))
-    {}
+    DoLegit( good, "" )
+      good = !!getlined_XFile (xf, "\\");
     if (!good) {
     }
     else if (skip_cstr_XFile (xf, "begin{document}")) {
@@ -149,24 +149,30 @@ hthead (HtmlState* st, XFile* xf)
     }
     else if (skip_cstr_XFile (xf, "title{"))
     {
-      if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+      DoLegit( good, "no closing brace" )
+        good = getlined_olay_XFile (olay, xf, "}");
+      if (good) {
         escape_for_html (&st->title, olay);
       }
     }
     else if (skip_cstr_XFile (xf, "author{"))
     {
-      if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+      DoLegit( good, "no closing brace" )
+        good = getlined_olay_XFile (olay, xf, "}");
+      if (good) {
         escape_for_html (&st->author, olay);
       }
     }
     else if (skip_cstr_XFile (xf, "date{"))
     {
-      if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+      DoLegit( good, "no closing brace" )
+        good = getlined_olay_XFile (olay, xf, "}");
+      if (good) {
         escape_for_html (&st->date, olay);
       }
     }
   }
-  if (LegitCk( true, good, "" )) {
+  if (good) {
     head_html (st);
   }
   st->allgood = st->allgood && good;
@@ -199,6 +205,12 @@ close_paragraph (HtmlState* st)
 // \textit{TEXT}  -->  <it>TEXT</it>
 // \textbf{TEXT}  -->  <b>TEXT</b>
 // \ilcode{...}  -->  <code>...</code>
+// \ilflag{...}
+// \ilfile{...}
+// \ilsym{...}
+// \illit{...}
+// \ilname{...}
+// $...$  -->  <i>...</i>
 // \begin{code}\n...\n\end{code}  -->  <pre><code>...</code></pre>
 // \href{URL}{TEXT}  -->  <a href='URL'>TEXT</a>
 // \url{URL}  -->  <a href='URL'>URL</a>
@@ -208,14 +220,14 @@ static
   bool
 htbody (HtmlState* st, XFile* xf, const char* pathname)
 {
-  bool good = true;
+  Sign good = 1;
   OFile* of = st->of;
 
   while (good && !st->end_document)
   {
     XFile olay[1];
     char match = 0;
-    if (!nextds_olay_XFile (olay, xf, &match, "\n\\%"))
+    if (!nextds_olay_XFile (olay, xf, &match, "\n\\%$"))
       break;
 
     //skipds_XFile (olay, WhiteSpaceChars);
@@ -243,6 +255,16 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       st->eol = true;
       getline_XFile (xf);
     }
+    else if (match == '$') {
+      open_paragraph (st);
+      oput_cstr_OFile (of, "<i>");
+      DoLegit( good, "no closing dollar sign" )
+        good = getlined_olay_XFile (olay, xf, "$");
+      if (good) {
+        escape_for_html (of, olay);
+        oput_cstr_OFile (of, "</i>");
+      }
+    }
     else if (match == '\\') {
       if (skip_cstr_XFile (xf, "\\")) {
         open_paragraph (st);
@@ -252,20 +274,26 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         close_paragraph (st);
         open_paragraph (st);
         oput_cstr_OFile (of, "<b>");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           escape_for_html (of, olay);
           oput_cstr_OFile (of, ".</b>");
         }
       }
       else if (skip_cstr_XFile (xf, "expten{")) {
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           oput_cstr_OFile (of, "&times;10<sup>");
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "</sup>");
         }
       }
       else if (skip_cstr_XFile (xf, "textit{")) {
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           oput_cstr_OFile (of, "<i>");
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
@@ -273,7 +301,9 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "textbf{")) {
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           oput_cstr_OFile (of, "<b>");
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
@@ -283,18 +313,70 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       else if (skip_cstr_XFile (xf, "ilcode{")) {
         open_paragraph (st);
         oput_cstr_OFile (of, "<code>");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "</code>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "ilflag{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<b>");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</b>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "ilfile{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<i>");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</i>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "ilsym{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<b>");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</b>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "illit{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<i>");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</i>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "ilname{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<b>");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</b>");
         }
       }
       else if (skip_cstr_XFile (xf, "begin{code}\n"))
       {
         close_paragraph (st);
         oput_cstr_OFile (of, "\n<pre><code>");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "\n\\end{code}"),
-                     good, "Need \\end{code} for \\begin{code}!" ))
-        {
+        DoLegit( good, "Need \\end{code} for \\begin{code}!" )
+          good = getlined_olay_XFile (olay, xf, "\n\\end{code}");
+        if (good) {
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "</code></pre>");
         }
@@ -302,7 +384,9 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       else if (skip_cstr_XFile (xf, "section{")) {
         close_paragraph (st);
         oput_cstr_OFile (of, "\n<h3>");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           oput_uint_OFile (of, ++ st->nsections);
           st->nsubsections = 0;
           oput_cstr_OFile (of, ". ");
@@ -313,7 +397,9 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       else if (skip_cstr_XFile (xf, "subsection{")) {
         close_paragraph (st);
         oput_cstr_OFile (of, "\n<h4>");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           oput_uint_OFile (of, st->nsections);
           oput_cstr_OFile (of, ".");
           oput_uint_OFile (of, ++ st->nsubsections);
@@ -325,11 +411,16 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       else if (skip_cstr_XFile (xf, "href{")) {
         open_paragraph (st);
         oput_cstr_OFile (of, "\n<a href='");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}{"), good, "" )) {
+        DoLegit( good, "no closing/open for href" )
+          good = getlined_olay_XFile (olay, xf, "}{");
+
+        DoLegit( good, "no closing brace" )
+        {
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "'>");
+          good = getlined_olay_XFile (olay, xf, "}");
         }
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        if (good) {
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "</a>");
         }
@@ -338,7 +429,9 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         XFile olay2[1];
         open_paragraph (st);
         oput_cstr_OFile (of, "\n<a href='");
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"), good, "" )) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
           *olay2 = *olay;
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "'>");
@@ -351,18 +444,19 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         AlphaTab filename[1];
         init_XFileB (xfb);
         init_AlphaTab (filename);
-        if (LegitCk( getlined_olay_XFile (olay, xf, "}"),
-                     good, "Need ending brace!" ))
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+
+        DoLegit( good, "Cannot open file!" )
         {
           cat_cstr_AlphaTab (filename, ccstr_of_XFile (olay));
           cat_cstr_AlphaTab (filename, ".tex");
+          good = open_FileB (&xfb->fb, pathname, cstr_of_AlphaTab (filename));
         }
-        if (LegitCk( open_FileB (&xfb->fb, pathname, cstr_of_AlphaTab (filename)),
-                     good, "Cannot open file!" ))
-        {
+        if (good) {
           htbody (st, &xfb->xf, cstr_of_AlphaTab (&xfb->fb.pathname));
         }
-        if (!good) {
+        else {
           DBog0( pathname );
           DBog0( cstr_of_AlphaTab (filename) );
         }
@@ -394,7 +488,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
   int
 main (int argc, char** argv)
 {
-  bool good = true;
+  Sign good = 1;
   int argi =
     (init_sysCx (&argc, &argv),
      1);
@@ -410,13 +504,17 @@ main (int argc, char** argv)
   while (good && argi < argc)
   {
     if (eq_cstr ("-x", argv[argi])) {
-      if (LegitCk( open_FileB (&xfb->fb, 0, argv[++argi]), good, "" )) {
+      DoLegit( good, "open file for reading" )
+        good = open_FileB (&xfb->fb, 0, argv[++argi]);
+      if (good) {
         ++ argi;
         xf = &xfb->xf;
       }
     }
     else if (eq_cstr ("-o", argv[argi])) {
-      if (LegitCk( open_FileB (&ofb->fb, 0, argv[++argi]), good, "" )) {
+      DoLegit( good, "open file for writing" )
+        good = open_FileB (&ofb->fb, 0, argv[++argi]);
+      if (good) {
         ++ argi;
         of = &ofb->of;
       }
