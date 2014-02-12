@@ -11,6 +11,7 @@ struct HtmlState
   bool eol;
   bool inparagraph;
   bool end_document;
+  Bool cram;
   OFile* of;
   uint nsections;
   uint nsubsections;
@@ -28,6 +29,7 @@ init_HtmlState (HtmlState* st, OFile* of)
   st->eol = true;
   st->inparagraph = false;
   st->end_document = false;
+  st->cram = false;
   st->of = of;
   st->nsections = 0;
   st->nsubsections = 0;
@@ -65,7 +67,20 @@ head_html (HtmlState* st)
   W("\n  white-space: pre-wrap;");
   //W("\n  white-space: -moz-pre-wrap;");
   //W("\n  white-space: -o-pre-wrap;");
+  W("\n  display: block;");
   W("\n}");
+  W("\npre.cram {");
+  W("\n  margin-top: -1em;");
+  W("\n}");
+  W("\np.cram {");
+  W("\n  margin-top: -0.5em;");
+  W("\n}");
+  W("\nspan.ttvbl {");
+  W("\n  font-family:\"Courier New\", Monospace;");
+  W("\n}");
+  //W("\npre.shortb {");
+  //W("\n  margin-bottom: -1em;");
+  //W("\n}");
   W("\npre,code {");
   W("\n  background-color: #E2E2E2;");
   W("\n}");
@@ -184,9 +199,14 @@ static
 open_paragraph (HtmlState* st)
 {
   if (st->inparagraph)  return;
-  oput_cstr_OFile (st->of, "\n<p>");
+  oput_cstr_OFile (st->of, "\n<p");
+  if (st->cram) {
+    oput_cstr_OFile (st->of, " class=\"cram\"");
+  }
+  oput_cstr_OFile (st->of, ">");
   st->inparagraph = true;
   st->eol = false;
+  st->cram = true;
 }
 
 static
@@ -196,6 +216,7 @@ close_paragraph (HtmlState* st)
   if (!st->inparagraph)  return;
   oput_cstr_OFile (st->of, "</p>");
   st->inparagraph = false;
+  st->cram = false;
 }
 
 
@@ -210,6 +231,8 @@ close_paragraph (HtmlState* st)
 // \ilsym{...}
 // \illit{...}
 // \ilname{...}
+// \ilkey{...}
+// \ttvbl{...}
 // $...$  -->  <i>...</i>
 // \begin{code}\n...\n\end{code}  -->  <pre><code>...</code></pre>
 // \href{URL}{TEXT}  -->  <a href='URL'>TEXT</a>
@@ -233,8 +256,10 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
     //skipds_XFile (olay, WhiteSpaceChars);
     if (eq_cstr ("", ccstr_of_XFile (olay)))
     {
-      if (match == '\n' && st->eol)
+      if (match == '\n' && st->eol) {
         close_paragraph (st);
+        st->cram = false;
+      }
     }
     else
     {
@@ -294,7 +319,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          oput_cstr_OFile (of, "<i>");
+          oput_cstr_OFile (of, " <i>");
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
           oput_cstr_OFile (of, "</i>");
@@ -304,7 +329,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          oput_cstr_OFile (of, "<b>");
+          oput_cstr_OFile (of, " <b>");
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
           oput_cstr_OFile (of, "</b>");
@@ -370,16 +395,45 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           oput_cstr_OFile (of, "</b>");
         }
       }
+      else if (skip_cstr_XFile (xf, "ilkey{")) {
+        open_paragraph (st);
+        //oput_cstr_OFile (of, "<b>");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          //oput_cstr_OFile (of, "</b>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "ttvbl{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, " <span class=\"ttvbl\">");
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</span>");
+        }
+      }
       else if (skip_cstr_XFile (xf, "begin{code}\n"))
       {
+        Bool cram = false;
+        if (st->inparagraph || st->cram) {
+          cram = true;
+        }
         close_paragraph (st);
-        oput_cstr_OFile (of, "\n<pre><code>");
+        oput_cstr_OFile (of, "\n<pre");
+        if (cram)
+          oput_cstr_OFile (of, " class=\"cram\"");
+        oput_cstr_OFile (of, "><code>");
+
         DoLegit( good, "Need \\end{code} for \\begin{code}!" )
           good = getlined_olay_XFile (olay, xf, "\n\\end{code}");
         if (good) {
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "</code></pre>");
         }
+        st->cram = true;
       }
       else if (skip_cstr_XFile (xf, "section{")) {
         close_paragraph (st);
