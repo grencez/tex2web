@@ -225,6 +225,7 @@ close_paragraph (HtmlState* st)
 // \expten{NUM}  -->  &times;10<sup>NUM</sup>
 // \textit{TEXT}  -->  <it>TEXT</it>
 // \textbf{TEXT}  -->  <b>TEXT</b>
+// \underline{TEXT}  -->  <u>TEXT</u>
 // \ilcode{...}  -->  <code>...</code>
 // \ilflag{...}
 // \ilfile{...}
@@ -333,6 +334,16 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
           oput_cstr_OFile (of, "</b>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "underline{")) {
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          oput_cstr_OFile (of, " <u>");
+          htbody (st, olay, pathname);
+          //escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</u>");
         }
       }
       else if (skip_cstr_XFile (xf, "ilcode{")) {
