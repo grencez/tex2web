@@ -18,6 +18,7 @@ struct HtmlState
   OFile title;
   OFile author;
   OFile date;
+  TableT(AlphaTab) search_paths;
 };
 
 static
@@ -36,6 +37,7 @@ init_HtmlState (HtmlState* st, OFile* of)
   init_OFile (&st->title);
   init_OFile (&st->author);
   init_OFile (&st->date);
+  InitTable( st->search_paths );
 }
 
 static
@@ -45,6 +47,9 @@ lose_HtmlState (HtmlState* st)
   lose_OFile (&st->title);
   lose_OFile (&st->author);
   lose_OFile (&st->date);
+  for (i ; st->search_paths.sz)
+    lose_AlphaTab (&st->search_paths.s[i]);
+  LoseTable( st->search_paths );
 }
 
 static
@@ -157,6 +162,7 @@ hthead (HtmlState* st, XFile* xf)
     DoLegit( good, "" )
       good = !!getlined_XFile (xf, "\\");
     if (!good) {
+      return false;
     }
     else if (skip_cstr_XFile (xf, "begin{document}")) {
       skipds_XFile (xf, WhiteSpaceChars);
@@ -295,6 +301,19 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       if (skip_cstr_XFile (xf, "\\")) {
         open_paragraph (st);
         oput_cstr_OFile (of, "<br/>");
+      }
+      else if (skip_cstr_XFile (xf, "begin{itemize}")) {
+      }
+      else if (skip_cstr_XFile (xf, "begin{itemize*}")) {
+      }
+      else if (skip_cstr_XFile (xf, "end{itemize}")) {
+        oput_cstr_OFile (of, "<br/>");
+      }
+      else if (skip_cstr_XFile (xf, "end{itemize*}")) {
+        oput_cstr_OFile (of, "<br/>");
+      }
+      else if (skip_cstr_XFile (xf, "item")) {
+        oput_cstr_OFile (of, "\n<br/>-");
       }
       else if (skip_cstr_XFile (xf, "quicksec{")) {
         close_paragraph (st);
@@ -446,6 +465,33 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
         st->cram = true;
       }
+      else if (skip_cstr_XFile (xf, "codeinputlisting{"))
+      {
+        Bool cram = false;
+        XFileB xfileb[1];
+        init_XFileB (xfileb);
+        if (st->inparagraph || st->cram) {
+          cram = true;
+        }
+        close_paragraph (st);
+        oput_cstr_OFile (of, "\n<pre");
+        if (cram)
+          oput_cstr_OFile (of, " class=\"cram\"");
+        oput_cstr_OFile (of, "><code>");
+
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+
+        DoLegit( good, "cannot open listing" )
+        {
+          const char* filename = ccstr_of_XFile (olay);
+          good = open_FileB (&xfileb->fb, pathname, filename);
+        }
+        if (good)
+          escape_for_html (of, &xfileb->xf);
+        oput_cstr_OFile (of, "</code></pre>");
+        lose_XFileB (xfileb);
+      }
       else if (skip_cstr_XFile (xf, "section{")) {
         close_paragraph (st);
         oput_cstr_OFile (of, "\n<h3>");
@@ -517,6 +563,13 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           cat_cstr_AlphaTab (filename, ccstr_of_XFile (olay));
           cat_cstr_AlphaTab (filename, ".tex");
           good = open_FileB (&xfb->fb, pathname, cstr_of_AlphaTab (filename));
+          if (!good) {
+            for (uint i = 0; i < st->search_paths.sz && !good; ++i) {
+              good = open_FileB (&xfb->fb,
+                                 cstr_of_AlphaTab (&st->search_paths.s[i]),
+                                 cstr_of_AlphaTab (filename));
+            }
+          }
         }
         if (good) {
           htbody (st, &xfb->xf, cstr_of_AlphaTab (&xfb->fb.pathname));
@@ -566,6 +619,8 @@ main (int argc, char** argv)
   init_XFileB (xfb);
   init_OFileB (ofb);
 
+  init_HtmlState (st, of);
+
   while (good && argi < argc)
   {
     if (eq_cstr ("-x", argv[argi])) {
@@ -581,8 +636,17 @@ main (int argc, char** argv)
         good = open_FileB (&ofb->fb, 0, argv[++argi]);
       if (good) {
         ++ argi;
-        of = &ofb->of;
+        st->of = &ofb->of;
       }
+    }
+    else if (eq_cstr ("-I", argv[argi])) {
+      AlphaTab* path = Grow1Table( st->search_paths );
+      *path = dflt_AlphaTab ();
+      argi += 1;
+      if (argi == argc) {
+        failout_sysCx ("no argument given for -I");
+      }
+      cat_cstr_AlphaTab (path, argv[argi++]);
     }
     else {
       good = false;
@@ -591,11 +655,9 @@ main (int argc, char** argv)
   if (!good)
     return 1;
 
-  init_HtmlState (st, of);
-
   hthead (st, xf);
   htbody (st, xf, cstr_of_AlphaTab (&xfb->fb.pathname));
-  foot_html (of);
+  foot_html (st->of);
   if (!st->end_document) {
     good = false;
   }
