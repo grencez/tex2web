@@ -227,6 +227,7 @@ close_paragraph (HtmlState* st)
 
 
 // \\  -->  <br/>
+// \   -->  &nbsp;
 // \quicksec{TEXT}  -->  <b>TEXT.</b>
 // \expten{NUM}  -->  &times;10<sup>NUM</sup>
 // \textit{TEXT}  -->  <it>TEXT</it>
@@ -302,6 +303,10 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         open_paragraph (st);
         oput_cstr_OFile (of, "<br/>");
       }
+      else if (skip_cstr_XFile (xf, " ")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "&nbsp;");
+      }
       else if (skip_cstr_XFile (xf, "begin{itemize}")) {
       }
       else if (skip_cstr_XFile (xf, "begin{itemize*}")) {
@@ -313,7 +318,13 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         oput_cstr_OFile (of, "<br/>");
       }
       else if (skip_cstr_XFile (xf, "item")) {
-        oput_cstr_OFile (of, "\n<br/>-");
+        if (!st->inparagraph) {
+          open_paragraph (st);
+          oput_cstr_OFile (of, "-");
+        }
+        else {
+          oput_cstr_OFile (of, "\n<br/>-");
+        }
       }
       else if (skip_cstr_XFile (xf, "quicksec{")) {
         close_paragraph (st);
@@ -547,6 +558,24 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           escape_for_html (of, olay);
           oput_cstr_OFile (of, "'>");
           escape_for_html (of, olay2);
+          oput_cstr_OFile (of, "</a>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "caturl{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "\n<a href='");
+        DoLegit( good, "no closing/open for caturl" )
+          good = getlined_olay_XFile (olay, xf, "}{");
+
+        DoLegit( good, "no closing brace" )
+        {
+          escape_for_html (of, olay);
+          good = getlined_olay_XFile (olay, xf, "}");
+        }
+        if (good) {
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "'>");
+          escape_for_html (of, olay);
           oput_cstr_OFile (of, "</a>");
         }
       }
