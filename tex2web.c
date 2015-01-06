@@ -258,6 +258,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
   {
     XFile olay[1];
     char match = 0;
+    bool was_eol;
     if (!nextds_olay_XFile (olay, xf, &match, "\n\\%$"))
       break;
 
@@ -277,6 +278,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       escape_for_html (of, olay);
     }
 
+    was_eol = st->eol;
     st->eol = false;
 
     if (!good) {
@@ -531,8 +533,10 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "href{")) {
+        if (was_eol && st->inparagraph)
+          oput_char_OFile (of, '\n');
         open_paragraph (st);
-        oput_cstr_OFile (of, "\n<a href='");
+        oput_cstr_OFile (of, "<a href='");
         DoLegit( good, "no closing/open for href" )
           good = getlined_olay_XFile (olay, xf, "}{");
 
@@ -549,8 +553,10 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       }
       else if (skip_cstr_XFile (xf, "url{")) {
         XFile olay2[1];
+        if (was_eol && st->inparagraph)
+          oput_char_OFile (of, '\n');
         open_paragraph (st);
-        oput_cstr_OFile (of, "\n<a href='");
+        oput_cstr_OFile (of, "<a href='");
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
@@ -562,8 +568,10 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "caturl{")) {
+        if (was_eol && st->inparagraph)
+          oput_char_OFile (of, '\n');
         open_paragraph (st);
-        oput_cstr_OFile (of, "\n<a href='");
+        oput_cstr_OFile (of, "<a href='");
         DoLegit( good, "no closing/open for caturl" )
           good = getlined_olay_XFile (olay, xf, "}{");
 
