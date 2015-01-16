@@ -11,6 +11,8 @@ struct HtmlState
   bool eol;
   bool inparagraph;
   bool end_document;
+  uint list_depth;
+  bool list_item_open;
   Bool cram;
   OFile* of;
   uint nsections;
@@ -30,6 +32,8 @@ init_HtmlState (HtmlState* st, OFile* of)
   st->eol = true;
   st->inparagraph = false;
   st->end_document = false;
+  st->list_depth = 0;
+  st->list_item_open = false;
   st->cram = false;
   st->of = of;
   st->nsections = 0;
@@ -77,10 +81,17 @@ head_html (HtmlState* st)
   W("\npre.cram {");
   W("\n  margin-top: -1em;");
   W("\n}");
+  W("\nol.cram {");
+  W("\n  margin-top: -1em;");
+  W("\n}");
+  W("\nul.cram {");
+  W("\n  margin-top: -1em;");
+  W("\n}");
   W("\np.cram {");
   W("\n  margin-top: -0.5em;");
   W("\n}");
-  W("\nspan.ttvbl {");
+  W("\nspan.underline { text-decoration: underline; }");
+  W("\nspan.texttt,span.ttvbl {");
   W("\n  font-family:\"Courier New\", Monospace;");
   W("\n}");
   //W("\npre.shortb {");
@@ -225,6 +236,46 @@ close_paragraph (HtmlState* st)
   st->cram = false;
 }
 
+static
+  void
+open_list (HtmlState* st, const char* tag)
+{
+  bool cram = st->inparagraph && st->list_depth == 0;
+  if (cram) {
+    close_paragraph (st);
+  }
+  st->inparagraph = true;
+
+  st->list_depth += 1;
+  oput_cstr_OFile (st->of, "<");
+  oput_cstr_OFile (st->of, tag);
+  if (cram) {
+    oput_cstr_OFile (st->of, " class=\"cram\"");
+  }
+  oput_cstr_OFile (st->of, ">");
+  st->list_item_open = false;
+}
+
+static
+  void
+close_list (HtmlState* st, const char* tag)
+{
+  if (st->list_item_open) {
+    oput_cstr_OFile (st->of, "</li>\n");
+  }
+  oput_cstr_OFile (st->of, "</");
+  oput_cstr_OFile (st->of, tag);
+  oput_cstr_OFile (st->of, ">");
+  st->list_depth -= 1;
+  if (st->list_depth > 0) {
+    oput_cstr_OFile (st->of, "</li>\n");
+  }
+  else {
+    st->inparagraph = false;
+  }
+  st->list_item_open = false;
+}
+
 
 // \\  -->  <br/>
 // \   -->  &nbsp;
@@ -232,6 +283,7 @@ close_paragraph (HtmlState* st)
 // \expten{NUM}  -->  &times;10<sup>NUM</sup>
 // \textit{TEXT}  -->  <it>TEXT</it>
 // \textbf{TEXT}  -->  <b>TEXT</b>
+// \texttt{TEXT}  -->  <b>TEXT</b>
 // \underline{TEXT}  -->  <u>TEXT</u>
 // \ilcode{...}  -->  <code>...</code>
 // \ilflag{...}
@@ -309,24 +361,36 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         open_paragraph (st);
         oput_cstr_OFile (of, "&nbsp;");
       }
-      else if (skip_cstr_XFile (xf, "begin{itemize}")) {
+      else if (skip_cstr_XFile (xf, "%")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "%");
       }
-      else if (skip_cstr_XFile (xf, "begin{itemize*}")) {
+      else if (skip_cstr_XFile (xf, "begin{itemize}") ||
+               skip_cstr_XFile (xf, "begin{itemize*}"))
+      {
+        open_list (st, "ul");
       }
-      else if (skip_cstr_XFile (xf, "end{itemize}")) {
-        oput_cstr_OFile (of, "<br/>");
+      else if (skip_cstr_XFile (xf, "begin{enumerate}") ||
+               skip_cstr_XFile (xf, "begin{enumerate*}"))
+      {
+        open_list (st, "ol");
       }
-      else if (skip_cstr_XFile (xf, "end{itemize*}")) {
-        oput_cstr_OFile (of, "<br/>");
+      else if (skip_cstr_XFile (xf, "end{itemize}") ||
+               skip_cstr_XFile (xf, "end{itemize*}"))
+      {
+        close_list (st, "ul");
+      }
+      else if (skip_cstr_XFile (xf, "end{enumerate}") ||
+               skip_cstr_XFile (xf, "end{enumerate*}"))
+      {
+        close_list (st, "ol");
       }
       else if (skip_cstr_XFile (xf, "item")) {
-        if (!st->inparagraph) {
-          open_paragraph (st);
-          oput_cstr_OFile (of, "-");
+        if (st->list_item_open) {
+          oput_cstr_OFile (of, "</li>\n");
         }
-        else {
-          oput_cstr_OFile (of, "\n<br/>-");
-        }
+        oput_cstr_OFile (of, "<li>");
+        st->list_item_open = true;
       }
       else if (skip_cstr_XFile (xf, "quicksec{")) {
         close_paragraph (st);
@@ -340,6 +404,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "expten{")) {
+        open_paragraph (st);
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
@@ -349,6 +414,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "textit{")) {
+        open_paragraph (st);
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
@@ -359,6 +425,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "textbf{")) {
+        open_paragraph (st);
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
@@ -368,14 +435,25 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           oput_cstr_OFile (of, "</b>");
         }
       }
-      else if (skip_cstr_XFile (xf, "underline{")) {
+      else if (skip_cstr_XFile (xf, "texttt{")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, " <span class=\"texttt\">");
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          oput_cstr_OFile (of, " <u>");
+          escape_for_html (of, olay);
+          oput_cstr_OFile (of, "</span>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "underline{")) {
+        open_paragraph (st);
+        DoLegit( good, "no closing brace" )
+          good = getlined_olay_XFile (olay, xf, "}");
+        if (good) {
+          oput_cstr_OFile (of, " <span class=\"underline\">");
           htbody (st, olay, pathname);
           //escape_for_html (of, olay);
-          oput_cstr_OFile (of, "</u>");
+          oput_cstr_OFile (of, "</span>");
         }
       }
       else if (skip_cstr_XFile (xf, "ilcode{")) {
@@ -440,12 +518,12 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       }
       else if (skip_cstr_XFile (xf, "ilkey{")) {
         open_paragraph (st);
-        //oput_cstr_OFile (of, "<b>");
+        oput_cstr_OFile (of, "<b>");
         DoLegit( good, "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
           escape_for_html (of, olay);
-          //oput_cstr_OFile (of, "</b>");
+          oput_cstr_OFile (of, "</b>");
         }
       }
       else if (skip_cstr_XFile (xf, "ttvbl{")) {
