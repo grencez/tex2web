@@ -7,7 +7,7 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
 project (tex2web)
 
-set (CxPath ${CMAKE_CURRENT_SOURCE_DIR}/../cx)
+set (CxPath ${CMAKE_CURRENT_SOURCE_DIR}/../dep/cx)
 set (BinPath ${CMAKE_CURRENT_SOURCE_DIR}/../bin)
 set (BldPath tex2web)
 
