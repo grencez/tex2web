@@ -1,0 +1,45 @@
+
+\title{Hello World!}
+%\author{}
+\date{}
+
+\begin{document}
+
+From the top-level directory, run:
+\begin{code}
+make
+./bin/tex2web < example/hello.tex > hello.html
+\end{code}
+Then open up \ilfile{hello.html} in a browser.
+You should see this file as clean and minimal HTML.
+
+Alternatively, one can check the author's university web page for an example of this tool's output:
+\url{http://www.csl.mtu.edu/~apklinkh/}
+
+\section{Dependencies}
+
+The main dependencies of \ilname{tex2web} are the author's C utility library found
+\href{http://github.com/grencez/cx}{here}
+and the preprocessed version
+\href{http://github.com/grencez/cx-pp}{here}.
+But don't worry about that, the \ilcode{make} command does all the downloading for you.
+
+\section{Features}
+
+This tool does simple LaTeX formatting.
+Formats like \textbf{bold}, \textit{italic}, and \texttt{teletype} are supported. as well as some custom macros.
+
+\begin{itemize}
+\item \ilcode{inline code}
+\item Purpose-built formatting for \ilflag{-command-line-flags}, \ilfile{filenames.h}, \ilsym{symbols}, \illit{LITERAL_VALUES}, \ilname{tool-names}, and \ilkey{keywords}.
+ \begin{itemize}
+ \item Some of these may look the same, but it's nice to be explicit.
+ \end{itemize}
+\end{itemize}
+
+\quicksec{Quick Aside}
+Sometimes you want to make a quick section without a formal number or gigantic spacing.
+In this case, use \ilcode{\quicksec}.
+
+\end{document}
+

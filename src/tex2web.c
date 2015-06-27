@@ -1,3 +1,10 @@
+/**
+ * This public domain code serves to:
+ * Transform very simple LaTeX files into HTML files.
+ *
+ * Usage example:
+ *   tex2web < in.tex > out.html
+ **/
 
 #include "cx/syscx.h"
 #include "cx/fileb.h"

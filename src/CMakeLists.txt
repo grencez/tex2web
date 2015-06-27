@@ -7,15 +7,17 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
 project (tex2web)
 
-set (CxPath ${CMAKE_CURRENT_SOURCE_DIR}/../dep/cx/src)
-set (BinPath ${CMAKE_CURRENT_SOURCE_DIR}/../bin)
+set (TopPath ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set (BinPath ${TopPath}/bin)
+set (DepPath ${TopPath}/dep)
+set (CxTopPath ${DepPath}/cx)
 set (BldPath tex2web)
 
 list (APPEND CFiles
   tex2web.c
   )
 
-include (${CxPath}/include.cmake)
+include (${CxTopPath}/src/include.cmake)
 
 set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BinPath})
 
