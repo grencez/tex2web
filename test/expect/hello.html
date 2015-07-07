@@ -1,0 +1,68 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML-Print 1.0//EN" "http://www.w3.org/MarkUp/DTD/xhtml-print10.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv='Content-Type' content='text/html;charset=utf-8'/>
+<style type="text/css">
+pre {
+  padding-left: 3em;
+  white-space: pre-wrap;
+  display: block;
+}
+pre.cram {
+  margin-top: -1em;
+}
+ol.cram {
+  margin-top: -1em;
+}
+ul.cram {
+  margin-top: -1em;
+}
+p.cram {
+  margin-top: -0.5em;
+}
+span.underline { text-decoration: underline; }
+span.texttt,span.ttvbl {
+  font-family:"Courier New", Monospace;
+}
+pre,code {
+  background-color: #E2E2E2;
+}
+div {
+  text-align: center;
+}
+</style>
+<title>Hello World!</title>
+</head>
+<body>
+<div>
+<h1>Hello World!</h1>
+<h3></h3>
+<h3></h3>
+</div>
+<p>From the top-level directory, run:</p>
+<pre class="cram"><code>make
+./bin/tex2web &lt; example/hello.tex &gt; hello.html</code></pre>
+<p class="cram">Then open up <i>hello.html</i> in a browser.
+You should see this file as clean and minimal HTML.</p>
+<p>Alternatively, one can check the author's university web page for an example of this tool's output:
+<a href='http://www.csl.mtu.edu/~apklinkh/'>http://www.csl.mtu.edu/~apklinkh/</a></p>
+<h3>1. Dependencies</h3>
+<p>The main dependencies of <b>tex2web</b> are the author's C utility library found
+<a href='http://github.com/grencez/cx'>here</a>
+and the preprocessed version
+<a href='http://github.com/grencez/cx-pp'>here</a>.
+But don't worry about that, the <code>make</code> command does all the downloading for you.</p>
+<h3>2. Features</h3>
+<p>This tool does simple LaTeX formatting.
+Formats like  <b>bold</b>,  <i>italic</i>, and  <span class="texttt">teletype</span> are supported. as well as some custom macros.</p><ul><li> <code>inline code</code></li>
+<li> Purpose-built formatting for <b>-command-line-flags</b>, <i>filenames.h</i>, <b>symbols</b>, <i>LITERAL_VALUES</i>, <b>tool-names</b>, and <b>keywords</b>.
+ <ul>
+ <li> Some of these may look the same, but it's nice to be explicit.
+ </li>
+</ul></li>
+</ul>
+<p><b>Quick Aside.</b>
+Sometimes you want to make a quick section without a formal number or gigantic spacing.
+In this case, use <code>\quicksec</code>.</p>
+</body>
+</html>
