@@ -684,21 +684,21 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         {
           cat_cstr_AlphaTab (filename, ccstr_of_XFile (olay));
           cat_cstr_AlphaTab (filename, ".tex");
-          good = open_FileB (&xfb->fb, pathname, cstr_of_AlphaTab (filename));
+          good = open_FileB (&xfb->fb, pathname, ccstr_of_AlphaTab (filename));
           if (!good) {
             for (uint i = 0; i < st->search_paths.sz && !good; ++i) {
               good = open_FileB (&xfb->fb,
-                                 cstr_of_AlphaTab (&st->search_paths.s[i]),
-                                 cstr_of_AlphaTab (filename));
+                                 ccstr_of_AlphaTab (&st->search_paths.s[i]),
+                                 ccstr_of_AlphaTab (filename));
             }
           }
         }
         if (good) {
-          htbody (st, &xfb->xf, cstr_of_AlphaTab (&xfb->fb.pathname));
+          htbody (st, &xfb->xf, ccstr_of_AlphaTab (&xfb->fb.pathname));
         }
         else {
           DBog0( pathname );
-          DBog0( cstr_of_AlphaTab (filename) );
+          DBog0( ccstr_of_AlphaTab (filename) );
         }
         lose_XFileB (xfb);
         lose_AlphaTab (filename);
@@ -778,7 +778,7 @@ main (int argc, char** argv)
     return 1;
 
   hthead (st, xf);
-  htbody (st, xf, cstr_of_AlphaTab (&xfb->fb.pathname));
+  htbody (st, xf, ccstr_of_AlphaTab (&xfb->fb.pathname));
   foot_html (st->of);
   if (!st->end_document) {
     good = false;
