@@ -47,3 +47,9 @@ add_test (NAME example_hello
   ${BinPath}/tex2web -x ${TopPath}/example/hello.tex
   )
 
+add_test (NAME example_macro
+  COMMAND
+  comparispawn ${TestPath}/expect/macro.html
+  ${BinPath}/tex2web -def pathname ../my/path -x ${TopPath}/example/macro.tex
+  )
+

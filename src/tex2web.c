@@ -8,6 +8,7 @@
 
 #include "cx/syscx.h"
 #include "cx/fileb.h"
+#include "cx/associa.h"
 
 typedef struct HtmlState HtmlState;
 
@@ -28,6 +29,7 @@ struct HtmlState
   OFile author;
   OFile date;
   TableT(AlphaTab) search_paths;
+  Associa macro_map;
 };
 
 static
@@ -49,6 +51,7 @@ init_HtmlState (HtmlState* st, OFile* of)
   init_OFile (&st->author);
   init_OFile (&st->date);
   InitTable( st->search_paths );
+  InitAssocia( AlphaTab, AlphaTab, st->macro_map, cmp_AlphaTab );
 }
 
 static
@@ -61,6 +64,19 @@ lose_HtmlState (HtmlState* st)
   for (i ; st->search_paths.sz)
     lose_AlphaTab (&st->search_paths.s[i]);
   LoseTable( st->search_paths );
+
+  for (Assoc* item = beg_Associa (&st->macro_map); item; )
+  {
+    AlphaTab* key = (AlphaTab*) key_of_Assoc (&st->macro_map, item);
+    AlphaTab* val = (AlphaTab*) val_of_Assoc (&st->macro_map, item);
+    Assoc* tmp = item;
+    item = next_Assoc (item);
+
+    give_Associa (&st->macro_map, tmp);
+    lose_AlphaTab (key);
+    lose_AlphaTab (val);
+  }
+  lose_Associa (&st->macro_map);
 }
 
 static
@@ -133,18 +149,59 @@ foot_html (OFile* of)
 #undef W
 }
 
+static void
+escape_for_html (OFile* of, XFile* xf, Associa* macro_map);
+
+static void
+handle_macro (OFile* of, XFile* xf, Associa* macro_map)
+{
+  static const char macro_delims[] = "{}()[]\\/. \n\t";
+  char* pos = tods_XFile (xf, macro_delims);
+  const char* sym_cstr = ccstr_of_XFile (xf);
+  char match = pos[0];
+  AlphaTab sym[1];
+  Assoc* macro_item;
+
+  pos[0] = '\0';
+  *sym = dflt1_AlphaTab (sym_cstr);
+
+  macro_item = lookup_Associa (macro_map, sym);
+  if (macro_item) {
+    XFile olay[1];
+    AlphaTab* val = (AlphaTab*) val_of_Assoc (macro_map, macro_item);
+    init_XFile_olay_AlphaTab (olay, val);
+    escape_for_html (of, olay, macro_map);
+  }
+  else {
+    DBog1( "I don't yet understand: \\%s", sym_cstr );
+  }
+
+  pos[0] = match;
+  skipto_XFile (xf, pos);
+  if (match == '{') {
+    nextds_XFile (xf, 0, "}");
+  }
+}
 
 static
   void
-escape_for_html (OFile* of, XFile* xf)
+escape_for_html (OFile* of, XFile* xf, Associa* macro_map)
 {
   //const char delims[] = "\"'&<>";
-  const char delims[] = "\"&<>";
-  char* s;
-  char match = 0;
-  while ((s = nextds_XFile (xf, &match, delims)))
+  const char delims[] = "\\\"&<>";
+  char* pos;
+  while ((pos = tods_XFile (xf, delims)))
   {
-    oput_cstr_OFile (of, s);
+    char match = pos[0];
+
+    pos[0] = '\0';
+    oput_cstr_OFile (of, ccstr_of_XFile (xf));
+    if (!match)  break;
+
+    pos[0] = match;
+    pos = &pos[1];
+    skipto_XFile (xf, pos);
+
     switch (match)
     {
     case '"':
@@ -161,6 +218,12 @@ escape_for_html (OFile* of, XFile* xf)
       break;
     case '>':
       oput_cstr_OFile (of, "&gt;");
+      break;
+    case '\\':
+      if (macro_map)
+        handle_macro (of, xf, macro_map);
+      else
+        oput_char_OFile (of, '\\');
       break;
     default:
       break;
@@ -191,7 +254,7 @@ hthead (HtmlState* st, XFile* xf)
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
       if (good) {
-        escape_for_html (&st->title, olay);
+        escape_for_html (&st->title, olay, &st->macro_map);
       }
     }
     else if (skip_cstr_XFile (xf, "author{"))
@@ -199,7 +262,7 @@ hthead (HtmlState* st, XFile* xf)
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
       if (good) {
-        escape_for_html (&st->author, olay);
+        escape_for_html (&st->author, olay, &st->macro_map);
       }
     }
     else if (skip_cstr_XFile (xf, "date{"))
@@ -207,7 +270,7 @@ hthead (HtmlState* st, XFile* xf)
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
       if (good) {
-        escape_for_html (&st->date, olay);
+        escape_for_html (&st->date, olay, &st->macro_map);
       }
     }
   }
@@ -334,7 +397,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       open_paragraph (st);
       if (st->eol)
         oput_cstr_OFile (of, "\n");
-      escape_for_html (of, olay);
+      escape_for_html (of, olay, &st->macro_map);
     }
 
     was_eol = st->eol;
@@ -355,7 +418,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       DoLegitLine( "no closing dollar sign" )
         getlined_olay_XFile (olay, xf, "$");
       if (good) {
-        escape_for_html (of, olay);
+        escape_for_html (of, olay, &st->macro_map);
         oput_cstr_OFile (of, "</i>");
       }
     }
@@ -406,7 +469,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, ".</b>");
         }
       }
@@ -416,7 +479,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
           oput_cstr_OFile (of, "&times;10<sup>");
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</sup>");
         }
       }
@@ -427,7 +490,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         if (good) {
           oput_cstr_OFile (of, " <i>");
           htbody (st, olay, pathname);
-          //escape_for_html (of, olay);
+          //escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</i>");
         }
       }
@@ -438,7 +501,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         if (good) {
           oput_cstr_OFile (of, " <b>");
           htbody (st, olay, pathname);
-          //escape_for_html (of, olay);
+          //escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
         }
       }
@@ -448,7 +511,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</span>");
         }
       }
@@ -459,7 +522,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         if (good) {
           oput_cstr_OFile (of, " <span class=\"underline\">");
           htbody (st, olay, pathname);
-          //escape_for_html (of, olay);
+          //escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</span>");
         }
       }
@@ -469,7 +532,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, 0);
           oput_cstr_OFile (of, "</code>");
         }
       }
@@ -479,7 +542,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
         }
       }
@@ -489,7 +552,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</i>");
         }
       }
@@ -499,7 +562,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
         }
       }
@@ -509,7 +572,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</i>");
         }
       }
@@ -519,7 +582,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
         }
       }
@@ -529,7 +592,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
         }
       }
@@ -539,7 +602,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</span>");
         }
       }
@@ -558,7 +621,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "Need \\end{code} for \\begin{code}!" )
           getlined_olay_XFile (olay, xf, "\n\\end{code}");
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</code></pre>");
         }
         st->cram = true;
@@ -586,7 +649,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           good = open_FileB (&xfileb->fb, pathname, filename);
         }
         if (good)
-          escape_for_html (of, &xfileb->xf);
+          escape_for_html (of, &xfileb->xf, &st->macro_map);
         oput_cstr_OFile (of, "</code></pre>");
         lose_XFileB (xfileb);
       }
@@ -599,7 +662,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           oput_uint_OFile (of, ++ st->nsections);
           st->nsubsections = 0;
           oput_cstr_OFile (of, ". ");
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</h3>");
         }
       }
@@ -613,7 +676,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           oput_cstr_OFile (of, ".");
           oput_uint_OFile (of, ++ st->nsubsections);
           oput_cstr_OFile (of, ". ");
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</h4>");
         }
       }
@@ -627,12 +690,12 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
 
         DoLegit( "no closing brace" )
         {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "'>");
           good = getlined_olay_XFile (olay, xf, "}");
         }
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</a>");
         }
       }
@@ -646,9 +709,9 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
           *olay2 = *olay;
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "'>");
-          escape_for_html (of, olay2);
+          escape_for_html (of, olay2, &st->macro_map);
           oput_cstr_OFile (of, "</a>");
         }
       }
@@ -662,13 +725,13 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
 
         DoLegit( "no closing brace" )
         {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           good = getlined_olay_XFile (olay, xf, "}");
         }
         if (good) {
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "'>");
-          escape_for_html (of, olay);
+          escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</a>");
         }
       }
@@ -710,14 +773,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         break;
       }
       else {
-        char match = 0;
-        char* s = nextds_XFile (xf, &match, "{}()[] \n\t");
-        if (s) {
-          DBog1( "I don't yet understand; \\%s", s );
-        }
-        if (match == '{') {
-          nextds_XFile (xf, 0, "}");
-        }
+        handle_macro (of, xf, &st->macro_map);
       }
     }
   }
@@ -745,30 +801,50 @@ main (int argc, char** argv)
 
   while (good && argi < argc)
   {
-    if (eq_cstr ("-x", argv[argi])) {
+    const char* arg = argv[argi++];
+    if (eq_cstr ("-x", arg)) {
       DoLegitLine( "open file for reading" )
-        open_FileB (&xfb->fb, 0, argv[++argi]);
+        open_FileB (&xfb->fb, 0, argv[argi++]);
       if (good) {
-        ++ argi;
         xf = &xfb->xf;
       }
     }
-    else if (eq_cstr ("-o", argv[argi])) {
+    else if (eq_cstr ("-o", arg)) {
       DoLegitLine( "open file for writing" )
-        open_FileB (&ofb->fb, 0, argv[++argi]);
+        open_FileB (&ofb->fb, 0, argv[argi++]);
       if (good) {
-        ++ argi;
         st->of = &ofb->of;
       }
     }
-    else if (eq_cstr ("-I", argv[argi])) {
+    else if (eq_cstr ("-I", arg)) {
       AlphaTab* path = Grow1Table( st->search_paths );
       *path = dflt_AlphaTab ();
-      argi += 1;
       if (argi == argc) {
         failout_sysCx ("no argument given for -I");
       }
       cat_cstr_AlphaTab (path, argv[argi++]);
+    }
+    else if (eq_cstr ("-def", arg)) {
+      AlphaTab key[1];
+      AlphaTab val[1];
+      Assoc* item;
+      bool added = false;
+      if (argi+2 >= argc) {
+        failout_sysCx ("Need 2 arguments for -def");
+      }
+
+      *key = cons1_AlphaTab (argv[argi++]);
+      *val = cons1_AlphaTab (argv[argi++]);
+
+      item = ensure1_Associa (&st->macro_map, key, &added);
+      if (added) {
+        val_fo_Assoc (&st->macro_map, item, val);
+      }
+      else {
+        lose_AlphaTab (key);
+        copy_AlphaTab ((AlphaTab*) val_of_Assoc (&st->macro_map, item), val);
+        lose_AlphaTab (val);
+      }
     }
     else {
       good = false;
