@@ -155,13 +155,31 @@ escape_for_html (OFile* of, XFile* xf, Associa* macro_map);
 static void
 handle_macro (OFile* of, XFile* xf, Associa* macro_map)
 {
-  static const char macro_delims[] = "{}()[]\\/. \n\t";
+  static const char macro_delims[] = "{}()[]\\/. \n\t_";
   char* pos = tods_XFile (xf, macro_delims);
   const char* sym_cstr = ccstr_of_XFile (xf);
   char match = pos[0];
   AlphaTab sym[1];
   Assoc* macro_item;
 
+  if (sym_cstr == pos) {
+    switch (match) {
+    case '\\':
+      oput_char_OFile (of, '\n');
+      break;
+    case '_':
+    case '%':
+      oput_char_OFile (of, match);
+      break;
+    default:
+      DBog1( "I don't yet understand: \\%c", match );
+      break;
+    }
+
+    if (match)
+      skipto_XFile (xf, &pos[1]);
+    return;
+  }
   pos[0] = '\0';
   *sym = dflt1_AlphaTab (sym_cstr);
 
@@ -621,7 +639,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "Need \\end{code} for \\begin{code}!" )
           getlined_olay_XFile (olay, xf, "\n\\end{code}");
         if (good) {
-          escape_for_html (of, olay, &st->macro_map);
+          escape_for_html (of, olay, 0);
           oput_cstr_OFile (of, "</code></pre>");
         }
         st->cram = true;
@@ -649,7 +667,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           good = open_FileB (&xfileb->fb, pathname, filename);
         }
         if (good)
-          escape_for_html (of, &xfileb->xf, &st->macro_map);
+          escape_for_html (of, &xfileb->xf, 0);
         oput_cstr_OFile (of, "</code></pre>");
         lose_XFileB (xfileb);
       }
@@ -829,7 +847,7 @@ main (int argc, char** argv)
       AlphaTab val[1];
       Assoc* item;
       bool added = false;
-      if (argi+2 >= argc) {
+      if (argi+1 >= argc) {
         failout_sysCx ("Need 2 arguments for -def");
       }
 
