@@ -44,12 +44,24 @@ set (TestPath ${TopPath}/test)
 add_test (NAME example_hello
   COMMAND
   comparispawn ${TestPath}/expect/hello.html
-  ${BinPath}/tex2web -x ${TopPath}/example/hello.tex
+  ${BinPath}/tex2web -x ${TopPath}/example/hello.tex -css style.css
   )
 
 add_test (NAME example_macro
   COMMAND
   comparispawn ${TestPath}/expect/macro.html
-  ${BinPath}/tex2web -def pathname ../my/path -x ${TopPath}/example/macro.tex
+  ${BinPath}/tex2web -def pathname ../my/path -x ${TopPath}/example/macro.tex -css style.css
+  )
+
+add_test (NAME example_table
+  COMMAND
+  comparispawn ${TestPath}/expect/table.html
+  ${BinPath}/tex2web -x ${TopPath}/example/table.tex -css style.css
+  )
+
+add_test (NAME css
+  COMMAND
+  comparispawn ${TestPath}/expect/style.css
+  ${BinPath}/tex2web -o-css -
   )
 

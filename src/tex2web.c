@@ -30,6 +30,7 @@ struct HtmlState
   OFile date;
   TableT(AlphaTab) search_paths;
   Associa macro_map;
+  AlphaTab css_filepath;
 };
 
 static
@@ -52,6 +53,7 @@ init_HtmlState (HtmlState* st, OFile* of)
   init_OFile (&st->date);
   InitTable( st->search_paths );
   InitAssocia( AlphaTab, AlphaTab, st->macro_map, cmp_AlphaTab );
+  st->css_filepath = dflt_AlphaTab ();
 }
 
 static
@@ -77,23 +79,15 @@ lose_HtmlState (HtmlState* st)
     lose_AlphaTab (val);
   }
   lose_Associa (&st->macro_map);
+  lose_AlphaTab (&st->css_filepath);
 }
 
+#define W(s)  oput_cstr_OFile (of, s)
 static
   void
-head_html (HtmlState* st)
+css_html (HtmlState* st)
 {
   OFile* of = st->of;
-#define W(s)  oput_cstr_OFile (of, s)
-  //W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">");
-  //W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML Basic 1.0//EN\" \"http://www.w3.org/TR/xhtml-basic/xhtml-basic10.dtd\">");
-  W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML-Print 1.0//EN\" \"http://www.w3.org/MarkUp/DTD/xhtml-print10.dtd\">");
-  W("\n<html xmlns=\"http://www.w3.org/1999/xhtml\">");
-  W("\n<head>");
-  W("\n<meta http-equiv='Content-Type' content='text/html;charset=utf-8'/>");
-
-  //W("<style media=\"screen\" type=\"text/css\">\n");
-  W("\n<style type=\"text/css\">");
   W("\npre {");
   W("\n  padding-left: 3em;");
   W("\n  white-space: pre-wrap;");
@@ -126,7 +120,44 @@ head_html (HtmlState* st)
   W("\ndiv {");
   W("\n  text-align: center;");
   W("\n}");
-  W("\n</style>");
+  W("\ntable {");
+  W("\n  border-spacing: 0;");
+  W("\n  border-collapse: collapse;");
+  W("\n}");
+  W("\ntd {");
+  W("\n  padding: 0.3em;");
+  W("\n  text-align: left;");
+  W("\n}");
+  W("\ntd.cjust { text-align: center; }");
+  W("\ntd.rjust { text-align: right; }");
+  W("\ntd.lline { border-left: thin solid black; }");
+  W("\ntd.rline { border-right: thin solid black; }");
+  W("\ntr.hline { border-top: thin solid black; }");
+}
+
+static
+  void
+head_html (HtmlState* st)
+{
+  OFile* of = st->of;
+  //W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">");
+  //W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML Basic 1.0//EN\" \"http://www.w3.org/TR/xhtml-basic/xhtml-basic10.dtd\">");
+  W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML-Print 1.0//EN\" \"http://www.w3.org/MarkUp/DTD/xhtml-print10.dtd\">");
+  W("\n<html xmlns=\"http://www.w3.org/1999/xhtml\">");
+  W("\n<head>");
+  W("\n<meta http-equiv='Content-Type' content='text/html;charset=utf-8'/>");
+
+  if (empty_ck_AlphaTab (&st->css_filepath)) {
+    //W("<style media=\"screen\" type=\"text/css\">\n");
+    W("\n<style type=\"text/css\">");
+    css_html (st);
+    W("\n</style>");
+  }
+  else {
+    W("\n<link rel=\"stylesheet\" type=\"text/css\" href=\"");
+    W(ccstr_of_AlphaTab (&st->css_filepath));
+    W("\">");
+  }
 
   W("\n<title>"); W(ccstr1_of_OFile (&st->title, 0)); W("</title>");
   W("\n</head>");
@@ -146,8 +177,8 @@ foot_html (OFile* of)
   //W("<p><a href='http://validator.w3.org/check?uri=referer'>Valid XHTML-Print 1.0</a></p>\n");
   W("\n</body>");
   W("\n</html>\n");
-#undef W
 }
+#undef W
 
 static void
 escape_for_html (OFile* of, XFile* xf, Associa* macro_map);
@@ -671,6 +702,84 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         oput_cstr_OFile (of, "</code></pre>");
         lose_XFileB (xfileb);
       }
+      else if (skip_cstr_XFile (xf, "begin{tabular}{")) {
+        const char* cols = 0;
+        const bool inparagraph = st->inparagraph;
+        DoLegitLine( "Need \\end{tabular} for \\begin{tabular}!" )
+          getlined_olay_XFile (olay, xf, "\n\\end{tabular}");
+
+        DoLegitLineP( cols, "Need column spec for tabular!" )
+          getlined_XFile (olay, "}");
+
+        DoLegit( 0 ) {
+          uint i;
+          XFile line_olay[1];
+
+          oput_cstr_OFile (of, "\n<table>");
+
+          while (getlined_olay_XFile (line_olay, olay, "\\\\")) {
+            XFile cell_olay[1];
+            i = 0;
+            skipds_XFile (line_olay, 0);
+            if (skip_cstr_XFile (line_olay, "\\hline"))
+              oput_cstr_OFile (of, "\n<tr class=\"hline\">");
+            else
+              oput_cstr_OFile (of, "\n<tr>");
+
+            while (getlined_olay_XFile (cell_olay, line_olay, "&")) {
+              bool lline = false;
+              bool rline = false;
+              Sign align = -1;
+
+              skipds_XFile (cell_olay, 0);
+
+              if (cols[i]=='|') { ++i; lline = true; }
+              if      (cols[i]=='l') { ++i; align = -1; }
+              else if (cols[i]=='c') { ++i; align =  0; }
+              else if (cols[i]=='r') { ++i; align =  1; }
+              if (cols[i]=='|') { ++i; rline = true; }
+
+              if (!lline && !rline && align < 0) {
+                oput_cstr_OFile (of, "\n<td>");
+              }
+              else {
+                const char* pfx = "";
+                oput_cstr_OFile (of, "\n<td class=\"");
+                if (lline) {
+                  oput_cstr_OFile (of, pfx);
+                  pfx = " ";
+                  oput_cstr_OFile (of, "lline");
+                }
+
+                if (align == 0) {
+                  oput_cstr_OFile (of, pfx);
+                  pfx = " ";
+                  oput_cstr_OFile (of, "cjust");
+                }
+
+                if (align > 0) {
+                  oput_cstr_OFile (of, pfx);
+                  pfx = " ";
+                  oput_cstr_OFile (of, "rjust");
+                }
+
+                if (rline) {
+                  oput_cstr_OFile (of, pfx);
+                  pfx = " ";
+                  oput_cstr_OFile (of, "rline");
+                }
+                oput_cstr_OFile (of, "\">");
+              }
+              st->inparagraph = true;
+              htbody (st, cell_olay, pathname);
+              oput_cstr_OFile (of, "</td>");
+            }
+            oput_cstr_OFile (of, "\n</tr>");
+          }
+          oput_cstr_OFile (of, "\n</table>");
+          st->inparagraph = inparagraph;
+        }
+      }
       else if (skip_cstr_XFile (xf, "section{")) {
         close_paragraph (st);
         oput_cstr_OFile (of, "\n<h3>");
@@ -834,6 +943,27 @@ main (int argc, char** argv)
         st->of = &ofb->of;
       }
     }
+    else if (eq_cstr ("-o-css", arg)) {
+      if (argi == argc) {
+        failout_sysCx ("no argument given for -o-css");
+      }
+      arg = argv[argi++];
+      if (!eq_cstr ("-", arg)) {
+        DoLegitLine( "open file for writing" )
+          open_FileB (&ofb->fb, 0, arg);
+        if (good)
+          st->of = &ofb->of;
+      }
+      if (good) {
+        css_html (st);
+      }
+
+      lose_HtmlState (st);
+      lose_XFileB (xfb);
+      lose_OFileB (ofb);
+      lose_sysCx ();
+      return (good ? 0 : 1);
+    }
     else if (eq_cstr ("-I", arg)) {
       AlphaTab* path = Grow1Table( st->search_paths );
       *path = dflt_AlphaTab ();
@@ -841,6 +971,16 @@ main (int argc, char** argv)
         failout_sysCx ("no argument given for -I");
       }
       cat_cstr_AlphaTab (path, argv[argi++]);
+    }
+    else if (eq_cstr ("-css", arg)) {
+      if (argi == argc) {
+        failout_sysCx ("no argument given for -css");
+      }
+      arg = argv[argi];
+      if (arg) {
+        copy_cstr_AlphaTab (&st->css_filepath, arg);
+        ++ argi;
+      }
     }
     else if (eq_cstr ("-def", arg)) {
       AlphaTab key[1];
