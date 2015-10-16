@@ -117,9 +117,6 @@ css_html (HtmlState* st)
   W("\npre,code {");
   W("\n  background-color: #E2E2E2;");
   W("\n}");
-  W("\ndiv {");
-  W("\n  text-align: center;");
-  W("\n}");
   W("\ntable {");
   W("\n  border-spacing: 0;");
   W("\n  border-collapse: collapse;");
@@ -128,8 +125,9 @@ css_html (HtmlState* st)
   W("\n  padding: 0.3em;");
   W("\n  text-align: left;");
   W("\n}");
-  W("\ntd.cjust { text-align: center; }");
-  W("\ntd.rjust { text-align: right; }");
+  W("\n.ljust { text-align: left; }");
+  W("\n.cjust { text-align: center; }");
+  W("\n.rjust { text-align: right; }");
   W("\ntd.lline { border-left: thin solid black; }");
   W("\ntd.rline { border-right: thin solid black; }");
   W("\ntr.hline { border-top: thin solid black; }");
@@ -163,7 +161,7 @@ head_html (HtmlState* st)
   W("\n</head>");
   W("\n<body>");
 
-  W("\n<div>");
+  W("\n<div class=\"cjust\">");
   W("\n<h1>"); W(ccstr1_of_OFile (&st->title, 0)); W("</h1>");
   W("\n<h3>"); W(ccstr1_of_OFile (&st->author, 0)); W("</h3>");
   W("\n<h3>"); W(ccstr1_of_OFile (&st->date, 0)); W("</h3>");
@@ -232,12 +230,11 @@ handle_macro (OFile* of, XFile* xf, Associa* macro_map)
   }
 }
 
-static
   void
 escape_for_html (OFile* of, XFile* xf, Associa* macro_map)
 {
   //const char delims[] = "\"'&<>";
-  const char delims[] = "\\\"&<>";
+  const char delims[] = "\\\"&<>-";
   char* pos;
   while ((pos = tods_XFile (xf, delims)))
   {
@@ -258,6 +255,16 @@ escape_for_html (OFile* of, XFile* xf, Associa* macro_map)
       break;
     case '\'':
       oput_cstr_OFile (of, "&#39;");
+      break;
+    case '-':
+      if (*pos == '-') {
+        oput_cstr_OFile (of, "&ndash;");
+        pos = &pos[1];
+        skipto_XFile (xf, pos);
+      }
+      else {
+        oput_char_OFile (of, '-');
+      }
       break;
     case '&':
       oput_cstr_OFile (of, "&amp;");
@@ -701,6 +708,36 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           escape_for_html (of, &xfileb->xf, 0);
         oput_cstr_OFile (of, "</code></pre>");
         lose_XFileB (xfileb);
+      }
+      else if (skip_cstr_XFile (xf, "begin{flushleft}")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<div class=\"ljust\">");
+        DoLegitLine( "No end to flushleft!" )
+          getlined_olay_XFile (olay, xf, "\\end{flushleft}");
+        if (good) {
+          htbody (st, olay, pathname);
+          oput_cstr_OFile (of, "</div>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "begin{center}")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<div class=\"cjust\">");
+        DoLegitLine( "No end to center!" )
+          getlined_olay_XFile (olay, xf, "\\end{center}");
+        if (good) {
+          htbody (st, olay, pathname);
+          oput_cstr_OFile (of, "</div>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "begin{flushright}")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<div class=\"rjust\">");
+        DoLegitLine( "No end to flushright!" )
+          getlined_olay_XFile (olay, xf, "\\end{flushright}");
+        if (good) {
+          htbody (st, olay, pathname);
+          oput_cstr_OFile (of, "</div>");
+        }
       }
       else if (skip_cstr_XFile (xf, "begin{tabular}{")) {
         const char* cols = 0;

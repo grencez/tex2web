@@ -23,9 +23,6 @@ span.texttt,span.ttvbl {
 pre,code {
   background-color: #E2E2E2;
 }
-div {
-  text-align: center;
-}
 table {
   border-spacing: 0;
   border-collapse: collapse;
@@ -34,8 +31,9 @@ td {
   padding: 0.3em;
   text-align: left;
 }
-td.cjust { text-align: center; }
-td.rjust { text-align: right; }
+.ljust { text-align: left; }
+.cjust { text-align: center; }
+.rjust { text-align: right; }
 td.lline { border-left: thin solid black; }
 td.rline { border-right: thin solid black; }
 tr.hline { border-top: thin solid black; }
