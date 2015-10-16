@@ -40,23 +40,25 @@ enable_testing ()
 
 set (TestPath ${TopPath}/test)
 
-## Ensure that the example we distribute actually works.
-add_test (NAME example_hello
-  COMMAND
-  comparispawn ${TestPath}/expect/hello.html
-  ${BinPath}/tex2web -x ${TopPath}/example/hello.tex -css style.css
+## Ensure that the examples we distribute actually works.
+set (Examples
+  hello
+  table
+  toc
   )
+
+foreach (f ${Examples})
+  add_test (NAME example_${f}
+    COMMAND
+    comparispawn ${TestPath}/expect/${f}.html
+    ${BinPath}/tex2web -x ${TopPath}/example/${f}.tex -css style.css
+    )
+endforeach ()
 
 add_test (NAME example_macro
   COMMAND
   comparispawn ${TestPath}/expect/macro.html
   ${BinPath}/tex2web -def pathname ../my/path -x ${TopPath}/example/macro.tex -css style.css
-  )
-
-add_test (NAME example_table
-  COMMAND
-  comparispawn ${TestPath}/expect/table.html
-  ${BinPath}/tex2web -x ${TopPath}/example/table.tex -css style.css
   )
 
 add_test (NAME css
