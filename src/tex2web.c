@@ -1124,6 +1124,17 @@ main (int argc, char** argv)
       *val = cons1_AlphaTab (argv[argi++]);
 
       item = ensure1_Associa (&st->macro_map, key, &added);
+
+      {
+        XFile xtmp[1];
+        OFile otmp[1];
+        init_XFile_olay_AlphaTab (xtmp, val);
+        init_OFile (otmp);
+        escape_for_html (otmp, xtmp, &st->macro_map);
+        copy_AlphaTab_OFile (val, otmp);
+        lose_OFile (otmp);
+      }
+
       if (added) {
         val_fo_Assoc (&st->macro_map, item, val);
       }
