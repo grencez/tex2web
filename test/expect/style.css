@@ -4,23 +4,15 @@ pre {
   white-space: pre-wrap;
   display: block;
 }
-pre.cram {
+pre.cram, ol.cram, ul.cram {
   margin-top: -1em;
 }
-ol.cram {
-  margin-top: -1em;
-}
-ul.cram {
-  margin-top: -1em;
-}
-p.cram {
-  margin-top: -0.5em;
-}
+p.cram { margin-top: -0.5em; }
 span.underline { text-decoration: underline; }
-span.texttt,span.ttvbl {
+span.texttt, span.ttvbl {
   font-family:"Courier New", Monospace;
 }
-pre,code {
+pre, code {
   background-color: #E2E2E2;
 }
 table {

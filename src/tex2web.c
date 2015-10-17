@@ -105,26 +105,18 @@ css_html (HtmlState* st)
   //W("\n  white-space: -o-pre-wrap;");
   W("\n  display: block;");
   W("\n}");
-  W("\npre.cram {");
+  W("\npre.cram, ol.cram, ul.cram {");
   W("\n  margin-top: -1em;");
   W("\n}");
-  W("\nol.cram {");
-  W("\n  margin-top: -1em;");
-  W("\n}");
-  W("\nul.cram {");
-  W("\n  margin-top: -1em;");
-  W("\n}");
-  W("\np.cram {");
-  W("\n  margin-top: -0.5em;");
-  W("\n}");
+  W("\np.cram { margin-top: -0.5em; }");
   W("\nspan.underline { text-decoration: underline; }");
-  W("\nspan.texttt,span.ttvbl {");
+  W("\nspan.texttt, span.ttvbl {");
   W("\n  font-family:\"Courier New\", Monospace;");
   W("\n}");
   //W("\npre.shortb {");
   //W("\n  margin-bottom: -1em;");
   //W("\n}");
-  W("\npre,code {");
+  W("\npre, code {");
   W("\n  background-color: #E2E2E2;");
   W("\n}");
   W("\ntable {");
@@ -302,6 +294,83 @@ escape_for_html (OFile* of, XFile* xf, Associa* macro_map)
   }
 }
 
+static
+  void
+add_newcommand (Associa* macro_map, const char* key_cstr, const char* val_cstr)
+{
+  AlphaTab key[1];
+  AlphaTab val[1];
+  Assoc* item;
+  bool added = false;
+
+  *key = cons1_AlphaTab (key_cstr);
+  *val = cons1_AlphaTab (val_cstr);
+
+  item = ensure1_Associa (macro_map, key, &added);
+
+  {
+    XFile xtmp[1];
+    OFile otmp[1];
+    init_XFile_olay_AlphaTab (xtmp, val);
+    init_OFile (otmp);
+    escape_for_html (otmp, xtmp, macro_map);
+    copy_AlphaTab_OFile (val, otmp);
+    lose_OFile (otmp);
+  }
+
+  if (added) {
+    val_fo_Assoc (macro_map, item, val);
+  }
+  else {
+    lose_AlphaTab (key);
+    copy_AlphaTab ((AlphaTab*) val_of_Assoc (macro_map, item), val);
+    lose_AlphaTab (val);
+  }
+}
+
+static
+  void
+parse_newcommand (XFile* xfile, Associa* macro_map)
+{
+  DeclLegit( good );
+  Trit mayflush = mayflush_XFile (xfile, Nil);
+  char* key_cstr = 0;
+  char* val_cstr = 0;
+
+  DoLegitLineP( key_cstr, "need argument for \\newcommand" )
+    getlined_XFile (xfile, "}{");
+
+  DoLegitP( val_cstr, "need second argument for \\newcommand" ) {
+    uint nbraces = 1;
+    char* pos;
+    ujint val_beg = xfile->off;
+
+    while (good && nbraces > 0) {
+      pos = tods_XFile (xfile, "{}");
+      if (*pos == '{') {
+        skipto_XFile (xfile, &pos[1]);
+        ++ nbraces;
+      }
+      else if (*pos == '}') {
+        skipto_XFile (xfile, &pos[1]);
+        -- nbraces;
+      }
+      else {
+        skipto_XFile (xfile, pos);
+        good = false;
+      }
+    }
+    if (good) {
+      pos[0] = '\0';
+      val_cstr = cstr1_of_XFile (xfile, val_beg);
+    }
+  }
+
+  DoLegit( 0 ) {
+    add_newcommand (macro_map, key_cstr, val_cstr);
+  }
+  mayflush_XFile (xfile, mayflush);
+}
 
 static
   bool
@@ -344,6 +413,9 @@ hthead (HtmlState* st, XFile* xf)
         escape_for_html (st->date, olay, &st->macro_map);
       }
     }
+    else if (skip_cstr_XFile (xf, "newcommand{\\")) {
+      parse_newcommand (xf, &st->macro_map);
+    }
   }
   if (good) {
     head_html (st);
@@ -377,6 +449,7 @@ close_paragraph (HtmlState* st)
   oput_cstr_OFile (ofile, "</p>");
   st->inparagraph = false;
   st->cram = false;
+  st->eol = false;
 }
 
 static
@@ -497,6 +570,7 @@ next_section (HtmlState* st, XFile* xf, XFile* olay)
 // \begin{tabular}  -->  <table>...</table>
 // \href{URL}{TEXT}  -->  <a href='URL'>TEXT</a>
 // \url{URL}  -->  <a href='URL'>URL</a>
+// \caturl{URL}  -->  <a href='URL'>URL</a>
 // \section{TEXT}  -->  <h3>TEXT</h3>
 // \subsection{TEXT}  -->  <h4>TEXT</h4>
 // \label{myname}  -->  <a name="myname">...</a>
@@ -511,7 +585,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
   {
     XFile olay[1];
     char match = 0;
-    bool was_eol;
+    bool pending_newline;
     if (!nextds_olay_XFile (olay, xf, &match, "\n\\%$-"))
       break;
 
@@ -526,12 +600,14 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
     else
     {
       open_paragraph (st);
-      if (st->eol)
+      if (st->eol) {
         oput_cstr_OFile (of, "\n");
+        st->eol = false;
+      }
       escape_for_html (of, olay, &st->macro_map);
     }
 
-    was_eol = st->eol;
+    pending_newline = (st->eol && st->inparagraph);
     st->eol = false;
 
     if (!good) {
@@ -554,6 +630,8 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       }
     }
     else if (match == '-') {
+      if (pending_newline)
+        oput_char_OFile (of, '\n');
       if (skip_cstr_XFile (xf, "-"))
         oput_cstr_OFile (of, "&ndash;");
       else
@@ -598,6 +676,9 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
         oput_cstr_OFile (of, "<li>");
         st->list_item_open = true;
+      }
+      else if (skip_cstr_XFile (xf, "newcommand{\\")) {
+        parse_newcommand (xf, &st->macro_map);
       }
       else if (skip_cstr_XFile (xf, "quicksec{")) {
         close_paragraph (st);
@@ -936,7 +1017,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "href{")) {
-        if (was_eol && st->inparagraph)
+        if (pending_newline)
           oput_char_OFile (of, '\n');
         open_paragraph (st);
         oput_cstr_OFile (of, "<a href='");
@@ -956,7 +1037,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       }
       else if (skip_cstr_XFile (xf, "url{")) {
         XFile olay2[1];
-        if (was_eol && st->inparagraph)
+        if (pending_newline)
           oput_char_OFile (of, '\n');
         open_paragraph (st);
         oput_cstr_OFile (of, "<a href='");
@@ -971,7 +1052,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         }
       }
       else if (skip_cstr_XFile (xf, "caturl{")) {
-        if (was_eol && st->inparagraph)
+        if (pending_newline)
           oput_char_OFile (of, '\n');
         open_paragraph (st);
         oput_cstr_OFile (of, "<a href='");
@@ -1112,37 +1193,11 @@ main (int argc, char** argv)
       }
     }
     else if (eq_cstr ("-def", arg)) {
-      AlphaTab key[1];
-      AlphaTab val[1];
-      Assoc* item;
-      bool added = false;
       if (argi+1 >= argc) {
         failout_sysCx ("Need 2 arguments for -def");
       }
-
-      *key = cons1_AlphaTab (argv[argi++]);
-      *val = cons1_AlphaTab (argv[argi++]);
-
-      item = ensure1_Associa (&st->macro_map, key, &added);
-
-      {
-        XFile xtmp[1];
-        OFile otmp[1];
-        init_XFile_olay_AlphaTab (xtmp, val);
-        init_OFile (otmp);
-        escape_for_html (otmp, xtmp, &st->macro_map);
-        copy_AlphaTab_OFile (val, otmp);
-        lose_OFile (otmp);
-      }
-
-      if (added) {
-        val_fo_Assoc (&st->macro_map, item, val);
-      }
-      else {
-        lose_AlphaTab (key);
-        copy_AlphaTab ((AlphaTab*) val_of_Assoc (&st->macro_map, item), val);
-        lose_AlphaTab (val);
-      }
+      add_newcommand (&st->macro_map, argv[argi], argv[argi+1]);
+      argi += 2;
     }
     else {
       good = false;
