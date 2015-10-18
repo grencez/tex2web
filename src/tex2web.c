@@ -12,6 +12,9 @@
 
 typedef struct HtmlState HtmlState;
 
+static bool
+htbody (HtmlState* st, XFile* xf, const char* pathname);
+
 struct HtmlState
 {
   bool allgood;
@@ -118,6 +121,14 @@ css_html (HtmlState* st)
   //W("\n}");
   W("\npre, code {");
   W("\n  background-color: #E2E2E2;");
+  W("\n}");
+  W("\na.texturl:link, a.texturl:visited {");
+  W("\n  color: black;");
+  W("\n  text-decoration: none;");
+  W("\n}");
+  W("\na.texturl:hover {");
+  W("\n  color: blue;");
+  W("\n  text-decoration: underline;");
   W("\n}");
   W("\ntable {");
   W("\n  border-spacing: 0;");
@@ -495,6 +506,34 @@ close_list (HtmlState* st, const char* tag)
 }
 
 static
+  bool
+insert_href (HtmlState* st, XFile* xf, bool black, const char* pathname)
+{
+  DeclLegit( good );
+  OFile* of = st->body_ofile;
+  XFile olay[1];
+  open_paragraph (st);
+  DoLegitLine( "no closing/open for href" )
+    getlined_olay_XFile (olay, xf, "}{");
+
+  DoLegit( "no closing brace for href" )
+  {
+    oput_cstr_OFile (of, "<a ");
+    if (black)
+      oput_cstr_OFile (of, "class='texturl' ");
+    oput_cstr_OFile (of, "href='");
+    escape_for_html (of, olay, &st->macro_map);
+    oput_cstr_OFile (of, "'>");
+    good = getlined_olay_XFile (olay, xf, "}");
+  }
+  if (good) {
+    htbody (st, olay, pathname);
+    oput_cstr_OFile (of, "</a>");
+  }
+  return good;
+}
+
+static
   void
 next_section (HtmlState* st, XFile* xf, XFile* olay)
 {
@@ -574,7 +613,6 @@ next_section (HtmlState* st, XFile* xf, XFile* olay)
 // \section{TEXT}  -->  <h3>TEXT</h3>
 // \subsection{TEXT}  -->  <h4>TEXT</h4>
 // \label{myname}  -->  <a name="myname">...</a>
-static
   bool
 htbody (HtmlState* st, XFile* xf, const char* pathname)
 {
@@ -1019,32 +1057,23 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       else if (skip_cstr_XFile (xf, "href{")) {
         if (pending_newline)
           oput_char_OFile (of, '\n');
-        open_paragraph (st);
-        oput_cstr_OFile (of, "<a href='");
-        DoLegitLine( "no closing/open for href" )
-          getlined_olay_XFile (olay, xf, "}{");
-
-        DoLegit( "no closing brace" )
-        {
-          escape_for_html (of, olay, &st->macro_map);
-          oput_cstr_OFile (of, "'>");
-          good = getlined_olay_XFile (olay, xf, "}");
-        }
-        if (good) {
-          escape_for_html (of, olay, &st->macro_map);
-          oput_cstr_OFile (of, "</a>");
-        }
+        good = insert_href (st, xf, false, pathname);
+      }
+      else if (skip_cstr_XFile (xf, "texthref{")) {
+        if (pending_newline)
+          oput_char_OFile (of, '\n');
+        good = insert_href (st, xf, true, pathname);
       }
       else if (skip_cstr_XFile (xf, "url{")) {
-        XFile olay2[1];
         if (pending_newline)
           oput_char_OFile (of, '\n');
         open_paragraph (st);
-        oput_cstr_OFile (of, "<a href='");
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
+          XFile olay2[1];
           *olay2 = *olay;
+          oput_cstr_OFile (of, "<a href='");
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "'>");
           escape_for_html (of, olay2, &st->macro_map);
