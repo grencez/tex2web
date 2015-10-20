@@ -13,7 +13,7 @@
 typedef struct HtmlState HtmlState;
 
 static bool
-htbody (HtmlState* st, XFile* xf, const char* pathname);
+htbody (OFile* of, XFile* xf, HtmlState* st);
 
 struct HtmlState
 {
@@ -35,6 +35,7 @@ struct HtmlState
   OFile date[1];
   OFile toc_ofile[1];
   OFile body_ofile[1];
+  const char* pathname;
   TableT(AlphaTab) search_paths;
   Associa macro_map;
   AlphaTab css_filepath;
@@ -62,6 +63,7 @@ init_HtmlState (HtmlState* st, OFile* ofile)
   init_OFile (st->date);
   init_OFile (st->toc_ofile);
   init_OFile (st->body_ofile);
+  st->pathname = 0;
   InitTable( st->search_paths );
   InitAssocia( AlphaTab, AlphaTab, st->macro_map, cmp_AlphaTab );
   st->css_filepath = dflt_AlphaTab ();
@@ -234,7 +236,7 @@ handle_macro (OFile* of, XFile* xf, Associa* macro_map)
     }
 
     if (match)
-      skipto_XFile (xf, &pos[1]);
+      offto_XFile (xf, &pos[1]);
     return;
   }
   pos[0] = '\0';
@@ -252,7 +254,7 @@ handle_macro (OFile* of, XFile* xf, Associa* macro_map)
   }
 
   pos[0] = match;
-  skipto_XFile (xf, pos);
+  offto_XFile (xf, pos);
   if (match == '{') {
     nextds_XFile (xf, 0, "}");
   }
@@ -273,8 +275,7 @@ escape_for_html (OFile* of, XFile* xf, Associa* macro_map)
     if (!match)  break;
 
     pos[0] = match;
-    pos = &pos[1];
-    skipto_XFile (xf, pos);
+    offto_XFile (xf, &pos[1]);
 
     switch (match)
     {
@@ -340,7 +341,7 @@ add_newcommand (Associa* macro_map, const char* key_cstr, const char* val_cstr)
 }
 
 static
-  void
+  bool
 parse_newcommand (XFile* xfile, Associa* macro_map)
 {
   DeclLegit( good );
@@ -351,36 +352,14 @@ parse_newcommand (XFile* xfile, Associa* macro_map)
   DoLegitLineP( key_cstr, "need argument for \\newcommand" )
     getlined_XFile (xfile, "}{");
 
-  DoLegitP( val_cstr, "need second argument for \\newcommand" ) {
-    uint nbraces = 1;
-    char* pos;
-    ujint val_beg = xfile->off;
-
-    while (good && nbraces > 0) {
-      pos = tods_XFile (xfile, "{}");
-      if (*pos == '{') {
-        skipto_XFile (xfile, &pos[1]);
-        ++ nbraces;
-      }
-      else if (*pos == '}') {
-        skipto_XFile (xfile, &pos[1]);
-        -- nbraces;
-      }
-      else {
-        skipto_XFile (xfile, pos);
-        good = false;
-      }
-    }
-    if (good) {
-      pos[0] = '\0';
-      val_cstr = cstr1_of_XFile (xfile, val_beg);
-    }
-  }
+  DoLegitLineP( val_cstr, "need second argument for \\newcommand" )
+    getmatchd_XFile (xfile, "{", "}");
 
   DoLegit( 0 ) {
     add_newcommand (macro_map, key_cstr, val_cstr);
   }
   mayflush_XFile (xfile, mayflush);
+  return !!good;
 }
 
 static
@@ -425,7 +404,7 @@ hthead (HtmlState* st, XFile* xf)
       }
     }
     else if (skip_cstr_XFile (xf, "newcommand{\\")) {
-      parse_newcommand (xf, &st->macro_map);
+      good = parse_newcommand (xf, &st->macro_map);
     }
   }
   if (good) {
@@ -507,7 +486,7 @@ close_list (HtmlState* st, const char* tag)
 
 static
   bool
-insert_href (HtmlState* st, XFile* xf, bool black, const char* pathname)
+insert_href (HtmlState* st, XFile* xf, bool black)
 {
   DeclLegit( good );
   OFile* of = st->body_ofile;
@@ -527,22 +506,31 @@ insert_href (HtmlState* st, XFile* xf, bool black, const char* pathname)
     good = getlined_olay_XFile (olay, xf, "}");
   }
   if (good) {
-    htbody (st, olay, pathname);
+    htbody (of, olay, st);
     oput_cstr_OFile (of, "</a>");
   }
   return good;
 }
 
 static
-  void
-next_section (HtmlState* st, XFile* xf, XFile* olay)
+  bool
+next_section (OFile* of, XFile* xf, HtmlState* st)
 {
-  OFile* of = st->body_ofile;
+  DeclLegit( good );
+  XFile olay[1];
   OFile* toc = st->toc_ofile;
   const Trit mayflush = mayflush_XFile (xf, Nil);
   AlphaTab label = dflt_AlphaTab ();
   bool subsec = (st->nsubsections > 0);
   const char* heading = (subsec ? "h4" : "h3");
+
+  DoLegitLine( "no closing brace for \\section" )
+    getmatchd_olay_XFile (olay, xf, "{", "}");
+
+  if (!good) {
+    mayflush_XFile (xf, mayflush);
+    return false;
+  }
 
   skipds_XFile (xf, WhiteSpaceChars);
   if (skip_cstr_XFile (xf, "\\label{")) {
@@ -559,31 +547,42 @@ next_section (HtmlState* st, XFile* xf, XFile* olay)
     }
   }
 
+  st->inparagraph = true;
+
+  printf_OFile (of, "\n<%s id=\"", heading);
+  oput_AlphaTab (of, &label);
+  printf_OFile (of, "\">%u.", st->nsections);
+  if (subsec)
+    printf_OFile (of, "%u.", st->nsubsections);
+  oput_char_OFile (of, ' ');
+  {
+    AlphaTab tmp = cons1_AlphaTab (ccstr_of_XFile (olay));
+    XFile olay2[1];
+    init_XFile_olay_AlphaTab (olay2, &tmp);
+    htbody (of, olay2, st);
+    lose_AlphaTab (&tmp);
+  }
+  printf_OFile (of, "</%s>", heading);
+
+
   if (st->nsections == 1 && st->nsubsections == 0)
-    oput_cstr_OFile (st->toc_ofile, "\n<ol class=\"cram\">");
+    oput_cstr_OFile (toc, "\n<ol class=\"cram\">");
   else if (st->nsubsections == 1)
-    oput_cstr_OFile (st->toc_ofile, "\n<ol>");
+    oput_cstr_OFile (toc, "\n<ol>");
   else
     oput_cstr_OFile (toc, "</li>");
 
   oput_cstr_OFile (toc, "\n<li><a href=\"#");
   oput_AlphaTab (toc, &label);
   oput_cstr_OFile (toc, "\">");
-  escape_for_html (toc, olay, &st->macro_map);
+  htbody (toc, olay, st);
   oput_cstr_OFile (toc, "</a>");
-
-
-  printf_OFile (of, "\n<%s id=\"", heading);
-  oput_AlphaTab (of, &label);
   lose_AlphaTab (&label);
 
-  printf_OFile (of, "\">%u.", st->nsections);
-  if (subsec)
-    printf_OFile (of, "%u.", st->nsubsections);
-  oput_char_OFile (of, ' ');
-  escape_for_html (of, olay, &st->macro_map);
-  printf_OFile (of, "</%s>", heading);
+  st->inparagraph = false;
+
   mayflush_XFile (xf, mayflush);
+  return true;
 }
 
 
@@ -614,10 +613,9 @@ next_section (HtmlState* st, XFile* xf, XFile* olay)
 // \subsection{TEXT}  -->  <h4>TEXT</h4>
 // \label{myname}  -->  <a name="myname">...</a>
   bool
-htbody (HtmlState* st, XFile* xf, const char* pathname)
+htbody (OFile* of, XFile* xf, HtmlState* st)
 {
   DeclLegit( good );
-  OFile* of = st->body_ofile;
 
   while (good && !st->end_document)
   {
@@ -715,8 +713,12 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         oput_cstr_OFile (of, "<li>");
         st->list_item_open = true;
       }
+      else if (skip_cstr_XFile (xf, "textiff")) {
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<it>iff</it>");
+      }
       else if (skip_cstr_XFile (xf, "newcommand{\\")) {
-        parse_newcommand (xf, &st->macro_map);
+        good = parse_newcommand (xf, &st->macro_map);
       }
       else if (skip_cstr_XFile (xf, "quicksec{")) {
         close_paragraph (st);
@@ -745,7 +747,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
           oput_cstr_OFile (of, " <i>");
-          htbody (st, olay, pathname);
+          htbody (of, olay, st);
           //escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</i>");
         }
@@ -756,7 +758,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           getlined_olay_XFile (olay, xf, "}");
         if (good) {
           oput_cstr_OFile (of, " <b>");
-          htbody (st, olay, pathname);
+          htbody (of, olay, st);
           //escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
         }
@@ -777,7 +779,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           good = getlined_olay_XFile (olay, xf, "}");
         if (good) {
           oput_cstr_OFile (of, " <span class=\"underline\">");
-          htbody (st, olay, pathname);
+          htbody (of, olay, st);
           //escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</span>");
         }
@@ -902,7 +904,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegit( "cannot open listing" )
         {
           const char* filename = ccstr_of_XFile (olay);
-          good = open_FileB (&xfileb->fb, pathname, filename);
+          good = open_FileB (&xfileb->fb, st->pathname, filename);
         }
         if (good)
           escape_for_html (of, &xfileb->xf, 0);
@@ -915,7 +917,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "No end to flushleft!" )
           getlined_olay_XFile (olay, xf, "\\end{flushleft}");
         if (good) {
-          htbody (st, olay, pathname);
+          htbody (of, olay, st);
           oput_cstr_OFile (of, "</div>");
         }
       }
@@ -925,7 +927,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "No end to center!" )
           getlined_olay_XFile (olay, xf, "\\end{center}");
         if (good) {
-          htbody (st, olay, pathname);
+          htbody (of, olay, st);
           oput_cstr_OFile (of, "</div>");
         }
       }
@@ -935,7 +937,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         DoLegitLine( "No end to flushright!" )
           getlined_olay_XFile (olay, xf, "\\end{flushright}");
         if (good) {
-          htbody (st, olay, pathname);
+          htbody (of, olay, st);
           oput_cstr_OFile (of, "</div>");
         }
       }
@@ -1008,7 +1010,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
                 oput_cstr_OFile (of, "\">");
               }
               st->inparagraph = true;
-              htbody (st, cell_olay, pathname);
+              htbody (of, cell_olay, st);
               oput_cstr_OFile (of, "</td>");
             }
             oput_cstr_OFile (of, "\n</tr>");
@@ -1027,22 +1029,12 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           oput_cstr_OFile (st->toc_ofile, "</li></ol>");
         ++ st->nsections;
         st->nsubsections = 0;
-
-        DoLegitLine( "no closing brace for \\section" )
-          getlined_olay_XFile (olay, xf, "}");
-        if (good) {
-          next_section (st, xf, olay);
-        }
+        good = next_section (of, xf, st);
       }
       else if (skip_cstr_XFile (xf, "subsection{")) {
         close_paragraph (st);
         ++ st->nsubsections;
-
-        DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
-        if (good) {
-          next_section (st, xf, olay);
-        }
+        good = next_section (of, xf, st);
       }
       else if (skip_cstr_XFile (xf, "label{")) {
         DoLegitLine( "no closing brace for \\label" )
@@ -1057,12 +1049,12 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
       else if (skip_cstr_XFile (xf, "href{")) {
         if (pending_newline)
           oput_char_OFile (of, '\n');
-        good = insert_href (st, xf, false, pathname);
+        good = insert_href (st, xf, false);
       }
       else if (skip_cstr_XFile (xf, "texthref{")) {
         if (pending_newline)
           oput_char_OFile (of, '\n');
-        good = insert_href (st, xf, true, pathname);
+        good = insert_href (st, xf, true);
       }
       else if (skip_cstr_XFile (xf, "url{")) {
         if (pending_newline)
@@ -1112,7 +1104,7 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
         {
           cat_cstr_AlphaTab (filename, ccstr_of_XFile (olay));
           cat_cstr_AlphaTab (filename, ".tex");
-          good = open_FileB (&xfb->fb, pathname, ccstr_of_AlphaTab (filename));
+          good = open_FileB (&xfb->fb, st->pathname, ccstr_of_AlphaTab (filename));
           if (!good) {
             for (uint i = 0; i < st->search_paths.sz && !good; ++i) {
               good = open_FileB (&xfb->fb,
@@ -1122,10 +1114,13 @@ htbody (HtmlState* st, XFile* xf, const char* pathname)
           }
         }
         if (good) {
-          htbody (st, &xfb->xf, ccstr_of_AlphaTab (&xfb->fb.pathname));
+          const char* tmp = st->pathname;
+          st->pathname = ccstr_of_AlphaTab (&xfb->fb.pathname);
+          htbody (of, &xfb->xf, st);
+          st->pathname = tmp;
         }
         else {
-          DBog0( pathname );
+          DBog0( st->pathname );
           DBog0( ccstr_of_AlphaTab (filename) );
         }
         lose_XFileB (xfb);
@@ -1235,9 +1230,14 @@ main (int argc, char** argv)
   if (!good)
     return 1;
 
-  hthead (st, xf);
-  htbody (st, xf, ccstr_of_AlphaTab (&xfb->fb.pathname));
-  foot_html (st);
+  st->pathname = ccstr_of_AlphaTab (&xfb->fb.pathname);
+  DoLegitLine( "Failed to parse heading" )
+    hthead (st, xf);
+  DoLegitLine( "Failed to parse body" )
+    htbody (st->body_ofile, xf, st);
+  DoLegit( 0 ) {
+    foot_html (st);
+  }
   if (!st->end_document) {
     good = false;
   }
