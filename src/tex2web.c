@@ -30,9 +30,9 @@ struct HtmlState
   OFile* ofile;
   uint nsections;
   uint nsubsections;
-  OFile title[1];
-  OFile author[1];
-  OFile date[1];
+  AlphaTab title;
+  AlphaTab author;
+  AlphaTab date;
   OFile toc_ofile[1];
   OFile body_ofile[1];
   const char* pathname;
@@ -58,9 +58,9 @@ init_HtmlState (HtmlState* st, OFile* ofile)
   st->ofile = ofile;
   st->nsections = 0;
   st->nsubsections = 0;
-  init_OFile (st->title);
-  init_OFile (st->author);
-  init_OFile (st->date);
+  st->title = dflt_AlphaTab ();
+  st->author = dflt_AlphaTab ();
+  st->date = dflt_AlphaTab ();
   init_OFile (st->toc_ofile);
   init_OFile (st->body_ofile);
   st->pathname = 0;
@@ -73,9 +73,9 @@ static
   void
 lose_HtmlState (HtmlState* st)
 {
-  lose_OFile (st->title);
-  lose_OFile (st->author);
-  lose_OFile (st->date);
+  lose_AlphaTab (&st->title);
+  lose_AlphaTab (&st->author);
+  lose_AlphaTab (&st->date);
   lose_OFile (st->toc_ofile);
   lose_OFile (st->body_ofile);
   for (i ; st->search_paths.sz)
@@ -158,7 +158,7 @@ head_html (HtmlState* st)
   W("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML-Print 1.0//EN\" \"http://www.w3.org/MarkUp/DTD/xhtml-print10.dtd\">");
   W("\n<html xmlns=\"http://www.w3.org/1999/xhtml\">");
   W("\n<head>");
-  W("\n<meta http-equiv='Content-Type' content='text/html;charset=utf-8'/>");
+  W("\n<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\" />");
 
   if (empty_ck_AlphaTab (&st->css_filepath)) {
     //W("<style media=\"screen\" type=\"text/css\">\n");
@@ -172,14 +172,18 @@ head_html (HtmlState* st)
     W("\">");
   }
 
-  W("\n<title>"); oput_OFile (ofile, st->title); W("</title>");
+  W("\n<title>"); oput_AlphaTab (ofile, &st->title); W("</title>");
   W("\n</head>");
   W("\n<body>");
 
   W("\n<div class=\"cjust\">");
-  W("\n<h1>"); oput_OFile (ofile, st->title); W("</h1>");
-  W("\n<h3>"); oput_OFile (ofile, st->author); W("</h3>");
-  W("\n<h3>"); oput_OFile (ofile, st->date); W("</h3>");
+  W("\n<h1>"); oput_AlphaTab (ofile, &st->title); W("</h1>");
+  if (!empty_ck_AlphaTab(&st->author)) {
+    W("\n<h3>"); oput_AlphaTab (ofile, &st->author); W("</h3>");
+  }
+  if (!empty_ck_AlphaTab(&st->date)) {
+    W("\n<h3>"); oput_AlphaTab (ofile, &st->date); W("</h3>");
+  }
   W("\n</div>");
 }
 
@@ -202,7 +206,7 @@ foot_html (HtmlState* st)
   ab = window2_OFile (st->body_ofile, st->toc_pos, st->body_ofile->off);
   oput_AlphaTab (st->ofile, &ab);
 
-  //W("<p><a href='http://validator.w3.org/check?uri=referer'>Valid XHTML-Print 1.0</a></p>\n");
+  //W("<p><a href=\"http://validator.w3.org/check?uri=referer\">Valid XHTML-Print 1.0</a></p>\n");
   W("\n</body>");
   W("\n</html>\n");
 }
@@ -383,24 +387,40 @@ hthead (HtmlState* st, XFile* xf)
     {
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
+
+      DoLegitLine( "Second \\title?" )
+        null_ck_AlphaTab (&st->title);
+
       if (good) {
-        escape_for_html (st->title, olay, &st->macro_map);
+        default OFile tmp_ofile;
+        escape_for_html (&tmp_ofile, olay, &st->macro_map);
+        init_AlphaTab_move_OFile (&st->title, &tmp_ofile);
       }
     }
     else if (skip_cstr_XFile (xf, "author{"))
     {
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
+
+      DoLegitLine( "Second \\author?" )
+        null_ck_AlphaTab (&st->author);
+
       if (good) {
-        escape_for_html (st->author, olay, &st->macro_map);
+        default OFile tmp_ofile;
+        escape_for_html (&tmp_ofile, olay, &st->macro_map);
+        init_AlphaTab_move_OFile (&st->author, &tmp_ofile);
       }
     }
     else if (skip_cstr_XFile (xf, "date{"))
     {
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
+      DoLegitLine( "Second \\date?" )
+        null_ck_AlphaTab (&st->author);
       if (good) {
-        escape_for_html (st->date, olay, &st->macro_map);
+        default OFile tmp_ofile;
+        escape_for_html (&tmp_ofile, olay, &st->macro_map);
+        init_AlphaTab_move_OFile (&st->date, &tmp_ofile);
       }
     }
     else if (skip_cstr_XFile (xf, "newcommand{\\")) {
@@ -499,10 +519,10 @@ insert_href (HtmlState* st, XFile* xf, bool black)
   {
     oput_cstr_OFile (of, "<a ");
     if (black)
-      oput_cstr_OFile (of, "class='texturl' ");
-    oput_cstr_OFile (of, "href='");
+      oput_cstr_OFile (of, "class=\"texturl\" ");
+    oput_cstr_OFile (of, "href=\"");
     escape_for_html (of, olay, &st->macro_map);
-    oput_cstr_OFile (of, "'>");
+    oput_cstr_OFile (of, "\">");
     good = getlined_olay_XFile (olay, xf, "}");
   }
   if (good) {
@@ -520,7 +540,7 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
   XFile olay[1];
   OFile* toc = st->toc_ofile;
   const Trit mayflush = mayflush_XFile (xf, Nil);
-  AlphaTab label = dflt_AlphaTab ();
+  default AlphaTab label;
   bool subsec = (st->nsubsections > 0);
   const char* heading = (subsec ? "h4" : "h3");
 
@@ -586,7 +606,7 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
 }
 
 
-// \\  -->  <br/>
+// \\  -->  <br />
 // \   -->  &nbsp;
 // \quicksec{TEXT}  -->  <b>TEXT.</b>
 // \expten{NUM}  -->  &times;10<sup>NUM</sup>
@@ -606,9 +626,9 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
 // \begin{code}\n...\n\end{code}  -->  <pre><code>...</code></pre>
 // \begin{center}  -->  <div class="cjust">...</div>
 // \begin{tabular}  -->  <table>...</table>
-// \href{URL}{TEXT}  -->  <a href='URL'>TEXT</a>
-// \url{URL}  -->  <a href='URL'>URL</a>
-// \caturl{URL}  -->  <a href='URL'>URL</a>
+// \href{URL}{TEXT}  -->  <a href="URL">TEXT</a>
+// \url{URL}  -->  <a href="URL">URL</a>
+// \caturl{URL}  -->  <a href="URL">URL</a>
 // \section{TEXT}  -->  <h3>TEXT</h3>
 // \subsection{TEXT}  -->  <h4>TEXT</h4>
 // \label{myname}  -->  <a name="myname">...</a>
@@ -676,7 +696,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
     else if (match == '\\') {
       if (skip_cstr_XFile (xf, "\\")) {
         open_paragraph (st);
-        oput_cstr_OFile (of, "<br/>");
+        oput_cstr_OFile (of, "<br />");
       }
       else if (skip_cstr_XFile (xf, " ")) {
         open_paragraph (st);
@@ -715,7 +735,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
       }
       else if (skip_cstr_XFile (xf, "textiff")) {
         open_paragraph (st);
-        oput_cstr_OFile (of, "<it>iff</it>");
+        oput_cstr_OFile (of, "<i>iff</i>");
       }
       else if (skip_cstr_XFile (xf, "newcommand{\\")) {
         good = parse_newcommand (xf, &st->macro_map);
@@ -1076,7 +1096,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         if (pending_newline)
           oput_char_OFile (of, '\n');
         open_paragraph (st);
-        oput_cstr_OFile (of, "<a href='");
+        oput_cstr_OFile (of, "<a href=\"");
         DoLegitLine( "no closing/open for caturl" )
           getlined_olay_XFile (olay, xf, "}{");
 
@@ -1087,16 +1107,15 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         }
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
-          oput_cstr_OFile (of, "'>");
+          oput_cstr_OFile (of, "\">");
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</a>");
         }
       }
       else if (skip_cstr_XFile (xf, "input{")) {
         XFileB xfb[1];
-        AlphaTab filename[1];
+        default* AlphaTab filename;
         init_XFileB (xfb);
-        init_AlphaTab (filename);
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
 
@@ -1145,10 +1164,10 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
   int
 main (int argc, char** argv)
 {
-  DeclLegit( good );
   int argi =
     (init_sysCx (&argc, &argv),
      1);
+  DeclLegit( good );
   XFileB xfb[1];
   OFileB ofb[1];
   XFile* xf = stdin_XFile ();
