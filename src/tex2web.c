@@ -269,17 +269,12 @@ escape_for_html (OFile* of, XFile* xf, Associa* macro_map)
 {
   //const char delims[] = "\"'&<>";
   const char delims[] = "\\\"&<>";
-  char* pos;
-  while ((pos = tods_XFile (xf, delims)))
+  char* s;
+  char match = 0;
+  while ((s = nextds_XFile (xf, &match, delims)))
   {
-    char match = pos[0];
-
-    pos[0] = '\0';
-    oput_cstr_OFile (of, ccstr_of_XFile (xf));
-    if (!match)  break;
-
-    pos[0] = match;
-    offto_XFile (xf, &pos[1]);
+    oput_cstr_OFile (of, s);
+    putlast_char_XFile (xf, match);
 
     switch (match)
     {
@@ -326,12 +321,10 @@ add_newcommand (Associa* macro_map, const char* key_cstr, const char* val_cstr)
 
   {
     XFile xtmp[1];
-    OFile otmp[1];
-    init_XFile_olay_AlphaTab (xtmp, val);
-    init_OFile (otmp);
+    OFile otmp[] = default;
+    init_XFile_move_AlphaTab (xtmp, val);
     escape_for_html (otmp, xtmp, macro_map);
-    copy_AlphaTab_OFile (val, otmp);
-    lose_OFile (otmp);
+    init_AlphaTab_move_OFile (val, otmp);
   }
 
   if (added) {
@@ -392,7 +385,7 @@ hthead (HtmlState* st, XFile* xf)
         null_ck_AlphaTab (&st->title);
 
       if (good) {
-        default OFile tmp_ofile;
+        OFile tmp_ofile = default;
         escape_for_html (&tmp_ofile, olay, &st->macro_map);
         init_AlphaTab_move_OFile (&st->title, &tmp_ofile);
       }
@@ -406,7 +399,7 @@ hthead (HtmlState* st, XFile* xf)
         null_ck_AlphaTab (&st->author);
 
       if (good) {
-        default OFile tmp_ofile;
+        OFile tmp_ofile = default;
         escape_for_html (&tmp_ofile, olay, &st->macro_map);
         init_AlphaTab_move_OFile (&st->author, &tmp_ofile);
       }
@@ -416,9 +409,9 @@ hthead (HtmlState* st, XFile* xf)
       DoLegitLine( "no closing brace" )
         getlined_olay_XFile (olay, xf, "}");
       DoLegitLine( "Second \\date?" )
-        null_ck_AlphaTab (&st->author);
+        null_ck_AlphaTab (&st->date);
       if (good) {
-        default OFile tmp_ofile;
+        OFile tmp_ofile = default;
         escape_for_html (&tmp_ofile, olay, &st->macro_map);
         init_AlphaTab_move_OFile (&st->date, &tmp_ofile);
       }
@@ -540,7 +533,7 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
   XFile olay[1];
   OFile* toc = st->toc_ofile;
   const Trit mayflush = mayflush_XFile (xf, Nil);
-  default AlphaTab label;
+  AlphaTab label = default;
   bool subsec = (st->nsubsections > 0);
   const char* heading = (subsec ? "h4" : "h3");
 
@@ -578,9 +571,8 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
   {
     AlphaTab tmp = cons1_AlphaTab (ccstr_of_XFile (olay));
     XFile olay2[1];
-    init_XFile_olay_AlphaTab (olay2, &tmp);
+    init_XFile_move_AlphaTab (olay2, &tmp);
     htbody (of, olay2, st);
-    lose_AlphaTab (&tmp);
   }
   printf_OFile (of, "</%s>", heading);
 
@@ -907,8 +899,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
       else if (skip_cstr_XFile (xf, "codeinputlisting{"))
       {
         Bool cram = false;
-        XFileB xfileb[1];
-        init_XFileB (xfileb);
+        XFileB xfileb[] = default;
         if (st->inparagraph || st->cram) {
           cram = true;
         }
@@ -1113,9 +1104,8 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         }
       }
       else if (skip_cstr_XFile (xf, "input{")) {
-        XFileB xfb[1];
-        default* AlphaTab filename;
-        init_XFileB (xfb);
+        XFileB xfb[] = default;
+        AlphaTab filename[] = default;
         DoLegitLine( "no closing brace" )
           getlined_olay_XFile (olay, xf, "}");
 
@@ -1168,14 +1158,11 @@ main (int argc, char** argv)
     (init_sysCx (&argc, &argv),
      1);
   DeclLegit( good );
-  XFileB xfb[1];
-  OFileB ofb[1];
+  XFileB xfb[] = default;
+  OFileB ofb[] = default;
   XFile* xf = stdin_XFile ();
   OFile* of = stdout_OFile ();
   HtmlState st[1];
-
-  init_XFileB (xfb);
-  init_OFileB (ofb);
 
   init_HtmlState (st, of);
 
