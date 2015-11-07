@@ -737,7 +737,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<b>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, ".</b>");
@@ -746,7 +746,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
       else if (skip_cstr_XFile (xf, "expten{")) {
         open_paragraph (st);
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           oput_cstr_OFile (of, "&times;10<sup>");
           escape_for_html (of, olay, &st->macro_map);
@@ -756,7 +756,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
       else if (skip_cstr_XFile (xf, "textit{")) {
         open_paragraph (st);
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           oput_cstr_OFile (of, " <i>");
           htbody (of, olay, st);
@@ -767,7 +767,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
       else if (skip_cstr_XFile (xf, "textbf{")) {
         open_paragraph (st);
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           oput_cstr_OFile (of, " <b>");
           htbody (of, olay, st);
@@ -779,7 +779,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, " <span class=\"texttt\">");
         DoLegitLine( "no closing brace" )
-          good = getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</span>");
@@ -788,7 +788,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
       else if (skip_cstr_XFile (xf, "underline{")) {
         open_paragraph (st);
         DoLegitLine( "no closing brace" )
-          good = getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           oput_cstr_OFile (of, " <span class=\"underline\">");
           htbody (of, olay, st);
@@ -800,7 +800,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<code>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, 0);
           oput_cstr_OFile (of, "</code>");
@@ -810,7 +810,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<b>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
@@ -820,7 +820,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<i>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</i>");
@@ -830,7 +830,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<b>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
@@ -840,7 +840,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<i>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</i>");
@@ -850,7 +850,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<b>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
@@ -860,7 +860,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, "<b>");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</b>");
@@ -870,7 +870,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
         open_paragraph (st);
         oput_cstr_OFile (of, " <span class=\"ttvbl\">");
         DoLegitLine( "no closing brace" )
-          getlined_olay_XFile (olay, xf, "}");
+          getmatchd_olay_XFile (olay, xf, "{", "}");
         if (good) {
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</span>");
