@@ -18,7 +18,7 @@ htbody (OFile* of, XFile* xf, HtmlState* st);
 struct HtmlState
 {
   bool allgood;
-  ujint nlines;
+  zuint nlines;
   bool eol;
   bool inparagraph;
   bool end_document;
@@ -26,7 +26,7 @@ struct HtmlState
   bool list_item_open;
   Bool cram;
   bool show_toc;
-  ujint toc_pos;
+  zuint toc_pos;
   OFile* ofile;
   uint nsections;
   uint nsubsections;
