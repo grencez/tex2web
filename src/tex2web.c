@@ -621,6 +621,7 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
 // \href{URL}{TEXT}  -->  <a href="URL">TEXT</a>
 // \url{URL}  -->  <a href="URL">URL</a>
 // \caturl{URL}  -->  <a href="URL">URL</a>
+// \includegraphics{URL}  -->  <img src="URL" />
 // \section{TEXT}  -->  <h3>TEXT</h3>
 // \subsection{TEXT}  -->  <h4>TEXT</h4>
 // \label{myname}  -->  <a name="myname">...</a>
@@ -1101,6 +1102,20 @@ htbody (OFile* of, XFile* xf, HtmlState* st)
           oput_cstr_OFile (of, "\">");
           escape_for_html (of, olay, &st->macro_map);
           oput_cstr_OFile (of, "</a>");
+        }
+      }
+      else if (skip_cstr_XFile (xf, "includegraphics{")) {
+        if (pending_newline)
+          oput_char_OFile (of, '\n');
+        open_paragraph (st);
+        oput_cstr_OFile (of, "<img src=\"");
+        DoLegitLine( "no closing for includegraphics" )
+          getlined_olay_XFile (olay, xf, "}");
+
+        DoLegit( 0 )
+        {
+          escape_for_html (of, olay, &st->macro_map);
+          oput_cstr_OFile (of, "\" />");
         }
       }
       else if (skip_cstr_XFile (xf, "input{")) {
