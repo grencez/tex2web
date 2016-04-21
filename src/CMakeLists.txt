@@ -9,7 +9,9 @@ project (tex2web)
 
 set (TopPath ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set (BinPath ${TopPath}/bin)
-set (DepPath ${TopPath}/dep)
+if (NOT DEFINED DepPath)
+  set (DepPath ${TopPath}/dep)
+endif ()
 set (CxTopPath ${DepPath}/cx)
 set (BldPath tex2web)
 
