@@ -30,6 +30,7 @@ struct HtmlState
   OFile* ofile;
   uint nsections;
   uint nsubsections;
+  AlphaTab pagetitle;
   AlphaTab title;
   AlphaTab author;
   AlphaTab date;
@@ -58,6 +59,7 @@ init_HtmlState (HtmlState* st, OFile* ofile)
   st->ofile = ofile;
   st->nsections = 0;
   st->nsubsections = 0;
+  st->pagetitle = dflt_AlphaTab ();
   st->title = dflt_AlphaTab ();
   st->author = dflt_AlphaTab ();
   st->date = dflt_AlphaTab ();
@@ -73,6 +75,7 @@ static
   void
 lose_HtmlState (HtmlState* st)
 {
+  lose_AlphaTab (&st->pagetitle);
   lose_AlphaTab (&st->title);
   lose_AlphaTab (&st->author);
   lose_AlphaTab (&st->date);
@@ -172,17 +175,17 @@ head_html (HtmlState* st)
     W("\">");
   }
 
-  W("\n<title>"); oput_AlphaTab (ofile, &st->title); W("</title>");
+  W("\n<title>"); oput_AlphaTab (ofile, &st->pagetitle); W("</title>");
   W("\n</head>");
   W("\n<body>");
 
   W("\n<div class=\"cjust\">");
   W("\n<h1>"); oput_AlphaTab (ofile, &st->title); W("</h1>");
   if (!empty_ck_AlphaTab(&st->author)) {
-    W("\n<h3>"); oput_AlphaTab (ofile, &st->author); W("</h3>");
+    W("\n<div>by "); oput_AlphaTab (ofile, &st->author); W("</div>");
   }
   if (!empty_ck_AlphaTab(&st->date)) {
-    W("\n<h3>"); oput_AlphaTab (ofile, &st->date); W("</h3>");
+    W("\n<div>"); oput_AlphaTab (ofile, &st->date); W("</div>");
   }
   W("\n</div>");
 }
@@ -196,7 +199,7 @@ foot_html (HtmlState* st)
   oput_AlphaTab (st->ofile, &ab);
 
   if (st->show_toc) {
-    oput_cstr_OFile (ofile, "<h3>Contents</h3>");
+    oput_cstr_OFile (ofile, "<p>Contents</p>");
     oput_OFile (ofile, st->toc_ofile);
     if (st->nsubsections > 0)
       oput_cstr_OFile (ofile, "</li></ol>");
@@ -376,18 +379,35 @@ hthead (HtmlState* st, XFile* xf)
       skipds_XFile (xf, WhiteSpaceChars);
       break;
     }
-    else if (skip_cstr_XFile (xf, "title{"))
+    else if (skip_cstr_XFile (xf, "title[") ||
+             skip_cstr_XFile (xf, "title{"))
     {
-      DoLegitLine( "no closing brace" )
-        getlined_olay_XFile (olay, xf, "}");
+      const bool optional = ('[' == *ccstr1_of_XFile (xf, xf->off-1));
 
       DoLegitLine( "Second \\title?" )
         null_ck_AlphaTab (&st->title);
+
+      if (optional) {
+        DoLegitLine( "title has no closing bracket / opening brace" )
+          getlined_olay_XFile (olay, xf, "]{");
+
+        if (good) {
+          OFile tmp_ofile = default;
+          escape_for_html (&tmp_ofile, olay, &st->macro_map);
+          init_AlphaTab_move_OFile (&st->pagetitle, &tmp_ofile);
+        }
+      }
+
+      DoLegitLine( "title has no closing brace" )
+        getlined_olay_XFile (olay, xf, "}");
 
       if (good) {
         OFile tmp_ofile = default;
         escape_for_html (&tmp_ofile, olay, &st->macro_map);
         init_AlphaTab_move_OFile (&st->title, &tmp_ofile);
+        if (!optional) {
+          copy_AlphaTab (&st->pagetitle, &st->title);
+        }
       }
     }
     else if (skip_cstr_XFile (xf, "author{"))
@@ -535,7 +555,7 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
   const Trit mayflush = mayflush_XFile (xf, Nil);
   AlphaTab label = default;
   bool subsec = (st->nsubsections > 0);
-  const char* heading = (subsec ? "h4" : "h3");
+  const char* heading = (subsec ? "h3" : "h2");
 
   DoLegitLine( "no closing brace for \\section" )
     getmatchd_olay_XFile (olay, xf, "{", "}");
@@ -622,8 +642,8 @@ next_section (OFile* of, XFile* xf, HtmlState* st)
 // \url{URL}  -->  <a href="URL">URL</a>
 // \caturl{URL}  -->  <a href="URL">URL</a>
 // \includegraphics{URL}  -->  <img src="URL" />
-// \section{TEXT}  -->  <h3>TEXT</h3>
-// \subsection{TEXT}  -->  <h4>TEXT</h4>
+// \section{TEXT}  -->  <h2>TEXT</h2>
+// \subsection{TEXT}  -->  <h3>TEXT</h3>
 // \label{myname}  -->  <a name="myname">...</a>
   bool
 htbody (OFile* of, XFile* xf, HtmlState* st)
