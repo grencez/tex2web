@@ -35,7 +35,7 @@ set (CPACK_GENERATOR "STGZ;TGZ;ZIP")
 set (MyName "Alex Klinkhamer (grencez)")
 set (CPACK_PACKAGE_VENDOR ${MyName})
 set (CPACK_PACKAGE_CONTACT ${MyName})
-set (CPACK_RESOURCE_FILE_LICENSE "${TopPath}/COPYING")
+set (CPACK_RESOURCE_FILE_LICENSE "${TopPath}/LICENSE")
 include (CPack)
 
 enable_testing ()
