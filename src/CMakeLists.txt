@@ -1,6 +1,6 @@
 
 cmake_minimum_required (VERSION 2.8)
-set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+#set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
 #set (CMAKE_BUILD_TYPE DEBUG)
@@ -9,17 +9,34 @@ project (tex2web)
 
 set (TopPath ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set (BinPath ${TopPath}/bin)
-if (NOT DEFINED DepPath)
-  set (DepPath ${TopPath}/dep)
-endif ()
+set (DepPath ${TopPath}/dep)
 set (CxTopPath ${DepPath}/cx)
-set (BldPath tex2web)
+
+#### External Project ####
+include(ExternalProject)
+
+set (CxTopPath ${DepPath}/cx)
+
+ExternalProject_Add(cx_project
+  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/external/cx
+  SOURCE_DIR ${CxTopPath}/src
+  BUILD_ALWAYS 1
+  INSTALL_COMMAND echo "No install step."
+  )
+
+#### The Rest ####
 
 list (APPEND CFiles
   tex2web.c
   )
 
+set (BldPath tex2web)
 include (${CxTopPath}/src/include.cmake)
+
+add_dependencies (cx cx_project)
+add_dependencies (cembed cx_project)
+add_dependencies (cswitch cx_project)
+add_dependencies (comparispawn cx_project)
 
 set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BinPath})
 
